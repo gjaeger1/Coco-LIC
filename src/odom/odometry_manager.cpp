@@ -127,6 +127,7 @@ namespace cocolic
     // gaussian-lic
     if_3dgs_ = node["if_3dgs"].as<bool>();
     lidar_skip_ = node["lidar_skip"].as<int>();
+    lidarpoints.clear();
 
     std::cout << std::fixed << std::setprecision(4);
     // LOG(INFO) << std::fixed << std::setprecision(4);
@@ -759,6 +760,7 @@ namespace cocolic
         if (cloud_distort_ds->size() != 0)
         {
           trajectory_->UndistortScanInG(*cloud_distort_ds, lidar.timestamp, *cloud_undistort_ds);
+          lidarpoints.push_back(cloud_undistort_ds);
         }
 
         // image
@@ -771,6 +773,37 @@ namespace cocolic
         double cx = cam_K(0, 2), cy = cam_K(1, 2);
         int H = camera_handler_->img_pose_->m_img.rows;
         int W = camera_handler_->img_pose_->m_img.cols;
+
+        // depth
+        cv::Mat depthmap = cv::Mat::zeros(H, W, CV_32FC1);
+        for (int j = std::max(0, int(lidarpoints.size()) - 5); j < lidarpoints.size(); j++)
+        {
+          auto lidarpoint = lidarpoints[j];
+          for (int i = 0; i < lidarpoint->size(); i++)
+          {
+            auto pt = lidarpoint->points[i];
+            Eigen::Vector3d pt_w = Eigen::Vector3d(pt.x, pt.y, pt.z);
+            Eigen::Vector3d pt_c = inv_pose_cam.unit_quaternion().toRotationMatrix() * pt_w + inv_pose_cam.translation();
+            double depth = pt_c(2);
+            pt_c /= pt_c(2);
+            double u = fx * pt_c(0) + cx;
+            double v = fy * pt_c(1) + cy;
+            int i_u = std::round(u), i_v = std::round(v);
+            if (depth <= 0) continue;
+            if (!((i_u >= 0 && i_u < W && i_v >= 0 && i_v < H))) continue;
+
+            float& current_depth = depthmap.at<float>(i_v, i_u);
+            if (current_depth == 0 || depth < current_depth) 
+            {
+                current_depth = depth;
+            }
+          }
+        }
+        while (lidarpoints.size() > 5)
+        {
+          lidarpoints.erase(lidarpoints.begin());
+        }
+        odom_viewer_.Publish3DGSDepth(depthmap, time + trajectory_->GetDataStartTime());
 
         // pose
         odom_viewer_.Publish3DGSPose(pose_cam.unit_quaternion(), pose_cam.translation(), time + trajectory_->GetDataStartTime());

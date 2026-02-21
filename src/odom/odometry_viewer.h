@@ -104,6 +104,7 @@ namespace cocolic
     ros::Publisher pub_pg_cloud_;
 
     ros::Publisher pub_gs_image_;
+    ros::Publisher pub_gs_depth_;
     ros::Publisher pub_gs_pose_;
     ros::Publisher pub_gs_points_;
 
@@ -186,6 +187,7 @@ namespace cocolic
       pub_pg_cloud_ = nh.advertise<sensor_msgs::PointCloud2>("/pg_global_cloud", 100);
 
       pub_gs_image_ = nh.advertise<sensor_msgs::Image>("/image_for_gs", 1000);
+      pub_gs_depth_ = nh.advertise<sensor_msgs::Image>("/depth_for_gs", 1000);
       pub_gs_pose_ = nh.advertise<geometry_msgs::PoseStamped>("/pose_for_gs", 1000);
       pub_gs_points_ = nh.advertise<sensor_msgs::PointCloud2>("/points_for_gs", 1000);
 
@@ -205,6 +207,22 @@ namespace cocolic
       cv_image.toImageMsg(outout_msg);
       
       pub_gs_image_.publish(outout_msg);
+    }
+
+    void Publish3DGSDepth(const cv::Mat &img, int64_t img_time)
+    {
+      cv_bridge::CvImage cv_image;
+      ros::Time time_tool;
+      cv_image.header.stamp = time_tool.fromNSec(img_time);
+      cv_image.header.frame_id = "image_frame";
+      // cv_image.encoding = sensor_msgs::image_encodings::MONO16; // 注意编码要匹配GRAY+uint16
+      cv_image.encoding = sensor_msgs::image_encodings::TYPE_32FC1; // 注意编码要匹配GRAY+float32
+      cv_image.image = img;
+
+      sensor_msgs::Image output_msg;
+      cv_image.toImageMsg(output_msg);
+
+      pub_gs_depth_.publish(output_msg);
     }
 
     void Publish3DGSPose(Eigen::Quaterniond quat, Eigen::Vector3d pos, int64_t img_time)

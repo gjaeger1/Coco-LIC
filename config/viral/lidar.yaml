@@ -2,7 +2,6 @@ lidar0:  # horizontal lidar
     topic: /os1_cloud_node1/points
     is_livox: false
     Extrinsics:  # lidar1 to imu
-        time_offset: 0.000
         Trans: [-0.050, 0.0, 0.055]
         Rot: [1, 0, 0,
               0, 1, 0,
@@ -11,7 +10,6 @@ lidar1:  # vertical lidar
     topic: /os1_cloud_node2/points
     is_livox: false
     Extrinsics:  # lidar2 to imu
-        time_offset: 0.000
         Trans: [-0.550, 0.030, 0.050]
         Rot: [-1.0, 0.0, 0.0,
               0.0, 0.0, 1.0,

@@ -1,13 +1,11 @@
 odometry_mode: 1  # LIO = 0, LICO = 1
 
-lidar_yaml: /fastlivo/lidar.yaml
-imu_yaml: /fastlivo/imu.yaml
-camera_yaml: /fastlivo/camera.yaml
+lidar_yaml: /fastlivo2/lidar.yaml
+imu_yaml: /fastlivo2/imu.yaml
+camera_yaml: /fastlivo2/camera.yaml
 
-# LiDAR_Degenerate.bag
-# Visual_Challenge.bag
-# hku1.bag
-# hku2.bag
+# Retail_Street.bag
+# CBD_Building_01.bag
 bag_path: /path/to/xxx.bag
 bag_start: 0.
 bag_durr: -1

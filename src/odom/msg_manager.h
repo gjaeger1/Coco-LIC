@@ -319,6 +319,7 @@ namespace cocolic
     bool lidar_timestamp_end_;
     bool remove_wrong_time_imu_;
     bool if_normalized_;
+    double img_time_offset_;
 
     std::string imu_topic_;
     int num_lidars_;

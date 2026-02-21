@@ -13,7 +13,7 @@ camera_yaml: /viral/camera.yaml
 # sbs_01.bag
 # sbs_02.bag
 # sbs_03.bag
-bag_path: xxx.bag
+bag_path: /path/to/xxx.bag
 bag_start: 0.
 bag_durr: -1
 

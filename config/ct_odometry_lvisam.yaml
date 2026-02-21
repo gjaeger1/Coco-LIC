@@ -6,7 +6,7 @@ camera_yaml: /lvisam/camera.yaml
 
 # jackal.bag
 # garden.bag
-bag_path: xxx.bag
+bag_path: /path/to/xxx.bag
 bag_start: 0.
 bag_durr: -1
 

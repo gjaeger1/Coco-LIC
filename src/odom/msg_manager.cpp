@@ -57,6 +57,7 @@ namespace cocolic
 
     std::string cam_yaml = node["camera_yaml"].as<std::string>();
     YAML::Node cam_node = YAML::LoadFile(config_path + cam_yaml);
+    img_time_offset_ = cam_node["img_time_offset"].as<double>();
 
     // add_extra_timeoffset_s_ =
     //     yaml::GetValue<double>(node, "add_extra_timeoffset_s", 0);
@@ -681,7 +682,7 @@ namespace cocolic
     }
 
     image_buf_.emplace_back();
-    image_buf_.back().timestamp = msg->header.stamp.toSec() * S_TO_NS;
+    image_buf_.back().timestamp = msg->header.stamp.toNSec() + img_time_offset_ * S_TO_NS;
     image_buf_.back().image = cvImgPtr->image;
     nerf_time_.push_back(image_buf_.back().timestamp);
 
@@ -716,7 +717,7 @@ namespace cocolic
     }
 
     image_buf_.emplace_back();
-    image_buf_.back().timestamp = msg->header.stamp.toSec() * S_TO_NS;
+    image_buf_.back().timestamp = msg->header.stamp.toNSec() + img_time_offset_ * S_TO_NS;
     image_buf_.back().image = cvImgPtr->image;
     nerf_time_.push_back(image_buf_.back().timestamp);
 

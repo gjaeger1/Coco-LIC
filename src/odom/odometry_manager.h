@@ -209,6 +209,7 @@ namespace cocolic
     std::queue<int64_t> time_buf;  // img timestamp
     std::queue<LiDARFeature> lidar_buf;  // lidarfeature in local
     std::queue<cv::Mat> img_buf;  // undistorted
+    std::vector<PosCloud::Ptr> lidarpoints;
   };
 
 } // namespace cocolic

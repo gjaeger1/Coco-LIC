@@ -8,7 +8,10 @@ camera_yaml: /r3live/camera.yaml
 # degenerate_seq_01.bag
 # degenerate_seq_02.bag
 # hku_campus_seq_00.bag
-bag_path: xxx.bag
+# hku_campus_seq_01.bag
+# hku_park_00.bag
+# hku_park_01.bag
+bag_path: /path/to/xxx.bag
 bag_start: 0.
 bag_durr: -1
 

@@ -6,7 +6,6 @@ if_normalized: false  # imu acc is normalized in FAST-LIVO dataset
 if_use_init_bg: false
 
 IMUExtrinsics:  # imu to imu
-    time_offset: 0.000
     Trans: [0, 0, 0]
     Rot: [ 1, 0, 0,
            0, 1, 0,

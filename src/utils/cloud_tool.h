@@ -111,6 +111,10 @@ inline void RTPointCloudTmp2RTPointCloud(
   output_cloud->resize(input_cloud->height * input_cloud->width);
   output_cloud->is_dense = input_cloud->is_dense;
 
+  bool m2dgr_flag = false;
+  assert(input_cloud->size() > 0);
+  if (input_cloud->points[0].time < 0.0) m2dgr_flag = true;
+
   RTPoint zero_point;
   zero_point.x = 0;
   zero_point.y = 0;
@@ -124,7 +128,8 @@ inline void RTPointCloudTmp2RTPointCloud(
     dst.z = src.z;
     dst.intensity = src.intensity;
     dst.ring = src.ring;
-    dst.time = int64_t(src.time * 1e9);  // float src.time = 0.0995 
+    if (!m2dgr_flag) dst.time = int64_t(src.time * 1e9);
+    else dst.time = int64_t((src.time + 0.1003) * 1e9);
 
     if (PointNorm(dst) < 0.1 || dst.time > 0.11 * 1e9) {
       dst = zero_point;

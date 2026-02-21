@@ -1,7 +1,7 @@
-imu_topic:  /imu/imu
+imu_topic:  /handsfree/imu 
 
 imu_excite_threshold: 0.5  # statical initialization, do not move!s
-gravity_mag: 9.80
+gravity_mag: 9.81
 if_normalized: false  # imu acc is normalized in FAST-LIVO dataset
 if_use_init_bg: false
 

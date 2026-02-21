@@ -113,14 +113,14 @@ struct ExtrinsicParam {
 
   // node["Extrinsics"]
   void Init(const YAML::Node& node) {
-    if (!(node["time_offset"] && node["Trans"] && node["Rot"])) {
+    if (!(node["Trans"] && node["Rot"])) {
       // LOG(WARNING)
       //     << "[ExtrinsicParam::Init] input yaml node has not parameters "
       //        "of Extrinsics struct. Return without Initialziation.";
       return;
     }
 
-    double t_s = yaml::GetValue<double>(node, "time_offset", 0);
+    double t_s = 0;
     t_offset_ns = t_s * 1e9;
     std::vector<double> params_vec;
     yaml::GetValues<double>(node, "Trans", 3, params_vec);
