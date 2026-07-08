@@ -686,16 +686,6 @@ namespace cocolic
     image_buf_.back().image = cvImgPtr->image;
     nerf_time_.push_back(image_buf_.back().timestamp);
 
-    if (image_buf_.back().image.cols == 640 || image_buf_.back().image.cols == 1280)
-    {
-      cv::resize(image_buf_.back().image, image_buf_.back().image, cv::Size(640, 512), 0, 0, cv::INTER_LINEAR);
-    }
-
-    // // for tiers
-    // if (image_buf_.back().image.cols == 1920)
-    // {
-    //   cv::resize(image_buf_.back().image, image_buf_.back().image, cv::Size(960, 540), 0, 0, cv::INTER_LINEAR);
-    // }
   }
 
   void MsgManager::ImageMsgHandle(const sensor_msgs::CompressedImageConstPtr &msg)
@@ -723,10 +713,10 @@ namespace cocolic
 
     // std::cout << image_buf_.back().image.rows << " " << image_buf_.back().image.cols << std::endl;
 
-    if (image_buf_.back().image.cols == 640 || image_buf_.back().image.cols == 1280)
-    {
-      cv::resize(image_buf_.back().image, image_buf_.back().image, cv::Size(640, 512), 0, 0, cv::INTER_LINEAR);
-    }
+///    if (image_buf_.back().image.cols == 640 || image_buf_.back().image.cols == 1280)
+///    {
+///      cv::resize(image_buf_.back().image, image_buf_.back().image, cv::Size(640, 512), 0, 0, cv::INTER_LINEAR);
+///    }
 
     // // for mars
     // if (image_buf_.back().image.cols == 2448)
