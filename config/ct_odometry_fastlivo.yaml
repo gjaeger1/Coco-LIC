@@ -40,4 +40,6 @@ is_evo_viral: false
 
 ### Gaussian-LIC ###
 if_3dgs: true  # if sending data to back-end for incremental Gaussian mapping  
+if_3dgs_export: false  # write 3DGS training dataset directly to disk (lossless, no ROS transport)
+gs_export_path: "/data/gs_export"  # only used when if_3dgs_export is true
 lidar_skip: 10  # downsample: randomly select a LiDAR point every [lidar_skip] points

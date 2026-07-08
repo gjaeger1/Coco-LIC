@@ -129,6 +129,16 @@ namespace cocolic
     lidar_skip_ = node["lidar_skip"].as<int>();
     lidarpoints.clear();
 
+    // lossless direct-to-disk 3DGS export (optional, backward compatible)
+    if_3dgs_export_ = node["if_3dgs_export"] ? node["if_3dgs_export"].as<bool>() : false;
+    if (if_3dgs_export_)
+    {
+      std::string gs_export_path = node["gs_export_path"]
+                                       ? node["gs_export_path"].as<std::string>()
+                                       : cache_path_ + "_gs_export";
+      gs_exporter_.Init(gs_export_path, K_);
+    }
+
     std::cout << std::fixed << std::setprecision(4);
     // LOG(INFO) << std::fixed << std::setprecision(4);
   }
@@ -421,7 +431,7 @@ namespace cocolic
     }
 
     /// [new] for Gaussian-LIC
-    if (process_image && if_3dgs_)
+    if (process_image && (if_3dgs_ || if_3dgs_export_))
     {
       Publish3DGSMappingData(msg);
     }
@@ -742,10 +752,16 @@ namespace cocolic
     lidar_buf.push(lidar_handler_->GetFeatureCurrent());
     img_buf.push(camera_handler_->img_pose_->m_img);
 
-    while(1)
+    Drain3DGSBuffer(false);
+  }
+
+  void OdometryManager::Drain3DGSBuffer(bool flush_all)
+  {
+    while(!time_buf.empty())
     {
       int64_t active_time = trajectory_->GetActiveTime();
-      if (time_buf.front() < active_time && lidar_buf.front().time_max < active_time)
+      if (flush_all ||
+          (time_buf.front() < active_time && lidar_buf.front().time_max < active_time))
       {
         auto time = time_buf.front();
         auto lidar = lidar_buf.front();
@@ -863,6 +879,14 @@ namespace cocolic
           new_colors.push_back(Eigen::Vector3i(red, green, blue));
         }
         odom_viewer_.Publish3DGSPoints(new_points, new_colors, time + trajectory_->GetDataStartTime());
+
+        if (if_3dgs_export_)
+        {
+          gs_exporter_.AddFrame(img, depthmap,
+                                pose_cam.unit_quaternion(), pose_cam.translation(),
+                                time + trajectory_->GetDataStartTime(),
+                                new_points, new_colors);
+        }
       }
       else break;
     }
@@ -870,6 +894,14 @@ namespace cocolic
 
   double OdometryManager::SaveOdometry()
   {
+    // flush frames still waiting for their spline segment (the fully optimized
+    // trajectory is available now), then finish the 3DGS dataset
+    if (if_3dgs_export_)
+    {
+      Drain3DGSBuffer(true);
+      gs_exporter_.Finalize();
+    }
+
     std::string descri;
     if (odometry_mode_ == LICO)
       descri = "LICO";

@@ -20,6 +20,7 @@
 
 #include <ros/ros.h>
 
+#include <odom/gs_exporter.h>
 #include <odom/msg_manager.h>
 #include <odom/odometry_viewer.h>
 #include <odom/trajectory_manager.h>
@@ -130,6 +131,8 @@ namespace cocolic
 
     void Publish3DGSMappingData(const NextMsgs& cur_msg);
 
+    void Drain3DGSBuffer(bool flush_all);
+
   protected:
     OdometryMode odometry_mode_;
 
@@ -205,6 +208,9 @@ namespace cocolic
 
     bool if_3dgs_;
     int lidar_skip_;
+
+    bool if_3dgs_export_;
+    GsExporter gs_exporter_;
 
     std::queue<int64_t> time_buf;  // img timestamp
     std::queue<LiDARFeature> lidar_buf;  // lidarfeature in local
