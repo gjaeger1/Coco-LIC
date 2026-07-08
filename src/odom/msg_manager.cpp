@@ -711,19 +711,6 @@ namespace cocolic
     image_buf_.back().image = cvImgPtr->image;
     nerf_time_.push_back(image_buf_.back().timestamp);
 
-    // std::cout << image_buf_.back().image.rows << " " << image_buf_.back().image.cols << std::endl;
-
-///    if (image_buf_.back().image.cols == 640 || image_buf_.back().image.cols == 1280)
-///    {
-///      cv::resize(image_buf_.back().image, image_buf_.back().image, cv::Size(640, 512), 0, 0, cv::INTER_LINEAR);
-///    }
-
-    // // for mars
-    // if (image_buf_.back().image.cols == 2448)
-    // {
-    //   // cv::resize(image_buf_.back().image, image_buf_.back().image, cv::Size(1224, 1024), 0, 0, cv::INTER_LINEAR);
-    //   cv::resize(image_buf_.back().image, image_buf_.back().image, cv::Size(612, 512), 0, 0, cv::INTER_LINEAR);
-    // }
   }
 
 } // namespace cocolic
