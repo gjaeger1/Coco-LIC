@@ -22,6 +22,8 @@
 #include <spline/spline_segment.h>
 #include <utils/parameter_struct.h>
 
+#include <iostream>
+
 #include <opencv2/core/core.hpp>
 #include <opencv2/highgui/highgui.hpp>
 
@@ -103,7 +105,37 @@ namespace cocolic
         SE3d Twb(S_ItoG.unit_quaternion().toRotationMatrix(), p_IinG);
         SE3d Tbc(S_VtoI_.unit_quaternion().toRotationMatrix(), p_VinI_);
         SE3d Twc = Twb * Tbc;
-        Vec3d p_C = Twc.inverse() * v_point_; 
+        Vec3d p_C = Twc.inverse() * v_point_;
+
+        // Cheirality guard: a trial pose during optimization can move the
+        // landmark onto or behind the image plane, where the projection and
+        // its Jacobian (~1/Z, ~1/Z^2) are singular. One non-finite residual
+        // or Jacobian makes Ceres abort the entire solve, so such a point
+        // must contribute nothing for this iterate instead.
+        if (!(p_C.z() > 1e-2))  // negated comparison also catches NaN
+        {
+          residuals[0] = 0.0;
+          residuals[1] = 0.0;
+          if (jacobians)
+          {
+            for (size_t i = 0; i < 8; ++i)
+            {
+              if (!jacobians[i]) continue;
+              Eigen::Map<Eigen::Matrix<double, 2, Eigen::Dynamic, Eigen::RowMajor>>(
+                  jacobians[i], 2, i < 4 ? 4 : 3)
+                  .setZero();
+            }
+          }
+          // The solver runs single-threaded (see TrajectoryEstimator::Solve),
+          // and this fires once per iteration per degenerate point, so log
+          // only a sparse sample.
+          static long zeroed_count = 0;
+          if (++zeroed_count % 512 == 1)
+            std::cout << "[pnp factor] landmark at/behind image plane (z="
+                      << p_C.z() << " m), zeroed " << zeroed_count
+                      << " evaluations so far\n";
+          return true;
+        }
 
         double fx = K_(0, 0);
         double cx = K_(0, 2);
@@ -277,6 +309,14 @@ namespace cocolic
         SE3d Twc = Twb * Tbc;
         Vec3d p_C = Twc.inverse() * v_point_; //
 
+        // Cheirality guard: the projection below and its Jacobian (~1/Z,
+        // ~1/Z^2) are singular for a landmark at/behind the image plane; a
+        // non-finite residual or Jacobian aborts the entire Ceres solve.
+        if (!(p_C.z() > 1e-2))  // negated comparison also catches NaN
+        {
+          return ZeroResidualsAndJacobians(residuals, jacobians, "behind image plane");
+        }
+
         //
         double fx = K_(0, 0);
         double cx = K_(0, 2);
@@ -287,9 +327,21 @@ namespace cocolic
         uv << fx * p_C.x() / p_C.z() + cx, fy * p_C.y() / p_C.z() + cy;
         double u = uv[0];
         double v = uv[1];
-        // 
-        int u_i = std::floor(u / scale_) * scale_; // 
+        //
+        int u_i = std::floor(u / scale_) * scale_; //
         int v_i = std::floor(v / scale_) * scale_;
+
+        // The patch loop below dereferences raw image pointers around
+        // (u_i, v_i) with offsets up to (patch_size_half_ + 2) * scale_ in
+        // both directions and performs no bounds checks; a patch reaching
+        // outside the image would read out-of-bounds memory.
+        const int margin = (patch_size_half_ + 2) * scale_;
+        if (u_i < margin || v_i < margin ||
+            u_i >= cur_img_.cols - margin || v_i >= cur_img_.rows - margin)
+        {
+          return ZeroResidualsAndJacobians(residuals, jacobians, "patch outside image");
+        }
+
         double sub_u = (u - u_i) / scale_; //
         double sub_v = (v - v_i) / scale_;
         double w_tl = (1.0 - sub_u) * (1.0 - sub_v); // 
@@ -413,6 +465,34 @@ namespace cocolic
       }
 
     private:
+      // Zeroes this factor's residuals and any requested Jacobian blocks so a
+      // degenerate landmark contributes nothing instead of non-finite values
+      // (which would abort the Ceres solve) or out-of-bounds reads.
+      bool ZeroResidualsAndJacobians(double *residuals, double **jacobians,
+                                     const char *reason) const
+      {
+        const int n_res = patch_size_ * patch_size_;
+        for (int k = 0; k < n_res; ++k) residuals[k] = 0.0;
+        if (jacobians)
+        {
+          for (size_t i = 0; i < 8; ++i)
+          {
+            if (!jacobians[i]) continue;
+            Eigen::Map<Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>>(
+                jacobians[i], n_res, i < 4 ? 4 : 3)
+                .setZero();
+          }
+        }
+        // The solver runs single-threaded (see TrajectoryEstimator::Solve);
+        // log only a sparse sample since this fires once per iteration per
+        // degenerate point.
+        static long zeroed_count = 0;
+        if (++zeroed_count % 512 == 1)
+          std::cout << "[photometric factor] " << reason << ", zeroed "
+                    << zeroed_count << " evaluations so far\n";
+        return true;
+      }
+
       inline double GetPixelValue(double u, double v) const
       {
         uchar *data = &cur_img_.data[int(v) * cur_img_.step + int(u)];

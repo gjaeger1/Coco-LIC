@@ -34,6 +34,33 @@ namespace cocolic
 
   using namespace opt_param;
 
+  namespace
+  {
+    // GetIdxT leaves `su` untouched when the queried time lies outside the
+    // knot span (e.g. a corrupted measurement timestamp). Proceeding anyway
+    // indexes blending_mats out of bounds and feeds garbage into the solver,
+    // and Ceres aborts the whole solve once any residual or Jacobian is
+    // non-finite. Callers must drop the measurement instead.
+    bool IsValidSplineSegment(const std::pair<int, double> &su,
+                              size_t num_segments, const char *factor_name,
+                              int64_t time_ns)
+    {
+      if (su.first >= 3 && su.first - 3 < static_cast<int>(num_segments))
+        return true;
+      // One bad timestamp affects many factors at once (e.g. every PnP point
+      // of an image), so deduplicate by timestamp to keep the log readable.
+      // Problem construction runs on the single bag-processing thread.
+      static int64_t last_logged_time_ns = -1;
+      if (time_ns != last_logged_time_ns)
+      {
+        last_logged_time_ns = time_ns;
+        std::cout << "[skip " << factor_name << " factor] time " << time_ns
+                  << " ns has no valid spline segment\n";
+      }
+      return false;
+    }
+  } // namespace
+
   TrajectoryEstimator::TrajectoryEstimator(Trajectory::Ptr trajectory,
                                            TrajectoryEstimatorOptions &option,
                                            std::string descri)
@@ -179,8 +206,10 @@ namespace cocolic
       bool marg_this_factor)
   {
     int64_t time_ns = imu_data.timestamp;
-    std::pair<int, double> su; // i u
+    std::pair<int, double> su(-1, 0.0); // i u
     trajectory_->GetIdxT(time_ns, su);
+    if (!IsValidSplineSegment(su, trajectory_->blending_mats.size(), "imu", time_ns))
+      return;
 
     // std::cout << "[time_ns | maxTime] " << time_ns << " " << trajectory_->maxTimeNsNURBS() << std::endl;
 
@@ -225,8 +254,10 @@ namespace cocolic
       const Eigen::Vector3d &p_LinI, double weight, bool marg_this_factor)
   {
     int64_t time_ns = pc.t_point;
-    std::pair<int, double> su; // i u
+    std::pair<int, double> su(-1, 0.0); // i u
     trajectory_->GetIdxT(time_ns, su);
+    if (!IsValidSplineSegment(su, trajectory_->blending_mats.size(), "loam", time_ns))
+      return;
 
     Eigen::Matrix4d blending_matrix = trajectory_->blending_mats[su.first - 3];
     Eigen::Matrix4d cumulative_blending_matrix = trajectory_->cumu_blending_mats[su.first - 3];
@@ -254,8 +285,10 @@ namespace cocolic
                                                            double img_weight)
   {
     int64_t time_ns = cur_img_timestamp;
-    std::pair<int, double> su; // i u
+    std::pair<int, double> su(-1, 0.0); // i u
     trajectory_->GetIdxT(time_ns, su);
+    if (!IsValidSplineSegment(su, trajectory_->blending_mats.size(), "pnp", time_ns))
+      return;
 
     Eigen::Matrix4d blending_matrix = trajectory_->blending_mats[su.first - 3];
     Eigen::Matrix4d cumulative_blending_matrix = trajectory_->cumu_blending_mats[su.first - 3];
@@ -286,8 +319,10 @@ namespace cocolic
       double img_weight)
   {
     int64_t time_ns = cur_img_timestamp;
-    std::pair<int, double> su; // i u
+    std::pair<int, double> su(-1, 0.0); // i u
     trajectory_->GetIdxT(time_ns, su);
+    if (!IsValidSplineSegment(su, trajectory_->blending_mats.size(), "photometric", time_ns))
+      return;
 
     Eigen::Matrix4d blending_matrix = trajectory_->blending_mats[su.first - 3];
     Eigen::Matrix4d cumulative_blending_matrix = trajectory_->cumu_blending_mats[su.first - 3];
@@ -346,8 +381,10 @@ namespace cocolic
                                                                 double pos_weight, double rot_weight)
   {
     int64_t time_ns = pose_data.timestamp;
-    std::pair<int, double> su; // i u
+    std::pair<int, double> su(-1, 0.0); // i u
     trajectory_->GetIdxT(time_ns, su);
+    if (!IsValidSplineSegment(su, trajectory_->blending_mats.size(), "pose", time_ns))
+      return;
 
     Eigen::Matrix4d blending_matrix = trajectory_->blending_mats[su.first - 3];
     Eigen::Matrix4d cumulative_blending_matrix = trajectory_->cumu_blending_mats[su.first - 3];
@@ -370,8 +407,10 @@ namespace cocolic
                                                                         double pos_weight, double rot_weight)
   {
     int64_t time_ns = pose_data.timestamp;
-    std::pair<int, double> su; // i u
+    std::pair<int, double> su(-1, 0.0); // i u
     trajectory_->GetIdxT(time_ns, su);
+    if (!IsValidSplineSegment(su, trajectory_->blending_mats.size(), "relative pose", time_ns))
+      return;
 
     Eigen::Matrix4d blending_matrix = trajectory_->blending_mats[su.first - 3];
     Eigen::Matrix4d cumulative_blending_matrix = trajectory_->cumu_blending_mats[su.first - 3];

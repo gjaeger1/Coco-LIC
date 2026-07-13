@@ -318,12 +318,28 @@ namespace cocolic
       // v_points_.clear();
       // px_obss_.clear();
       auto &map_rgb_pts_in_last_frame_pos = camera_handler_->op_track.m_map_rgb_pts_in_last_frame_pos;
+      // Gate tracked points before they become PnP factors: the tracker's own
+      // cheirality check ran under an older pose, and a point at/behind the
+      // image plane makes the PnP projection singular.
+      SE3d Tcw = Twc.inverse();
+      int num_gated = 0;
       for (auto it = map_rgb_pts_in_last_frame_pos.begin(); it != map_rgb_pts_in_last_frame_pos.end(); it++)
       {
         RGB_pts *rgb_pt = ((RGB_pts *)it->first);
-        v_points_.push_back(Eigen::Vector3d(rgb_pt->get_pos()(0, 0), rgb_pt->get_pos()(1, 0), rgb_pt->get_pos()(2, 0)));
+        Eigen::Vector3d p_w(rgb_pt->get_pos()(0, 0), rgb_pt->get_pos()(1, 0), rgb_pt->get_pos()(2, 0));
+        if (!p_w.allFinite() || (Tcw * p_w).z() < 0.1)
+        {
+          num_gated++;
+          continue;
+        }
+        v_points_.push_back(p_w);
         px_obss_.push_back(Eigen::Vector2d(it->second.x, it->second.y));
       }
+      if (num_gated > 0)
+        std::cout << "[pnp gate] dropped " << num_gated << "/"
+                  << map_rgb_pts_in_last_frame_pos.size()
+                  << " tracked points (non-finite or depth < 0.1 m) at image t="
+                  << msg.image_timestamp << " ns\n";
 
       if (odom_viewer_.pub_track_img_.getNumSubscribers() != 0 || odom_viewer_.pub_sub_visual_map_.getNumSubscribers() != 0)
       {
