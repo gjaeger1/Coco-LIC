@@ -49,6 +49,27 @@ if(ENABLE_LOOP_CLOSURE)
     message(WARNING "GTSAM ${GTSAM_VERSION} < 4.1: robust_kernel 'gnc' will be unavailable; cauchy/dcs still work.")
   endif()
   add_definitions(-DENABLE_LOOP_CLOSURE)
+
+  # Scan Context (Kim et al.) is CC BY-NC-SA 4.0 and must not be vendored
+  # into this GPLv3 tree; it is fetched into the build directory instead.
+  # SCANCONTEXT_DIR may point to a pre-existing local clone for offline builds.
+  if(SCANCONTEXT_DIR)
+    set(scancontext_SOURCE_DIR ${SCANCONTEXT_DIR})
+  else()
+    include(FetchContent)
+    FetchContent_Declare(scancontext
+      GIT_REPOSITORY https://github.com/gisbi-kim/scancontext.git
+      GIT_TAG        93672835bb85e9c03fedf0fbaf2d0491df12161e)
+    FetchContent_MakeAvailable(scancontext)
+  endif()
+  set(SCANCONTEXT_SRC_DIR ${scancontext_SOURCE_DIR}/cpp/module/Scancontext)
+
+  add_library(loop_lib
+    src/loop/scan_context_detector.cpp
+    ${SCANCONTEXT_SRC_DIR}/Scancontext.cpp
+  )
+  target_include_directories(loop_lib PRIVATE ${SCANCONTEXT_SRC_DIR})
+  target_link_libraries(loop_lib ${thirdparty_libraries})
 endif()
 
 # find_package(yaml-cpp REQUIRED)
