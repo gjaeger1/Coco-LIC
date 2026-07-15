@@ -138,6 +138,25 @@ namespace cocolic
 
     void UpdateCloudKeyPos(const std::pair<int, int> &cur_wrt_history);
 
+    // Timestamps of keyframes created since the last call, in creation order;
+    // clears the internal list. Index alignment: the i-th keyframe ever
+    // returned across all calls corresponds to cloud_key_pos_->points[i].
+    std::vector<int64_t> TakeNewKeyframeTimes()
+    {
+      std::vector<int64_t> out;
+      out.swap(new_keyframe_times_);
+      return out;
+    }
+
+    // Downsampled, undistorted keyframe scan in the LiDAR frame at kf_time,
+    // or nullptr if kf_time is not a keyframe timestamp. Pointer stays valid
+    // for the lifetime of this handler (the container is never pruned).
+    const LiDARFeature *GetKeyframeScanDs(int64_t kf_time) const
+    {
+      auto it = local_feature_container_all_ds_.find(kf_time);
+      return it == local_feature_container_all_ds_.end() ? nullptr : &it->second;
+    }
+
     // 
     const LiDARFeature &GetFeatureCurrent() const { return feature_cur_; }
 
@@ -224,6 +243,8 @@ namespace cocolic
     // for loop closure
     PosCloud::Ptr cloud_key_pos_xy_;
     bool key_frame_updated_;
+    // Keyframe times not yet consumed by the loop-closure module.
+    std::vector<int64_t> new_keyframe_times_;
 
     /// 
     double keyframe_angle_degree_;

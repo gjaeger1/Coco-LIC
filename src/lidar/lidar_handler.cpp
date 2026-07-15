@@ -251,6 +251,7 @@ namespace cocolic
       local_feature_container_all_ds_[key_scan.timestamp] = key_scan_ds;
       // 
       latest_feature_time_ = key_scan.timestamp;
+      new_keyframe_times_.push_back(key_scan.timestamp);
 #endif
       cache_feature_container_.erase(iter++);
 
