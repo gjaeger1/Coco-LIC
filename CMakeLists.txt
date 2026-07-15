@@ -66,6 +66,7 @@ if(ENABLE_LOOP_CLOSURE)
 
   add_library(loop_lib
     src/loop/scan_context_detector.cpp
+    src/loop/loop_verifier.cpp
     ${SCANCONTEXT_SRC_DIR}/Scancontext.cpp
   )
   target_include_directories(loop_lib PRIVATE ${SCANCONTEXT_SRC_DIR})
