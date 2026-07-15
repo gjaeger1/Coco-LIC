@@ -40,4 +40,21 @@ is_evo_viral: false
 if_3dgs: true  # if sending data to back-end for incremental Gaussian mapping  
 if_3dgs_export: false  # write 3DGS training dataset directly to disk (lossless, no ROS transport)
 gs_export_path: "/data/gs_export"  # only used when if_3dgs_export is true
+loop_closure:
+  enable: false            # master switch; false = odometry-only, current behavior
+  shadow_mode: true        # true: detect/verify/optimize + final correction only, never touch live odometry
+  detector: scan_context
+  min_index_gap: 50
+  detection_stride: 1
+  verifier:
+    icp_fitness_max: 0.3
+    overlap_ratio_min: 0.6
+    submap_half_size: 12
+  pgo:
+    robust_kernel: cauchy  # none | huber | cauchy | dcs | gnc (gnc needs GTSAM >= 4.1)
+    odom_rotation_sigma_deg: 0.5
+    odom_translation_sigma_m: 0.05
+    rp_information_scale: 100.0
+  log_dir: ""              # empty = <output cache dir>/loop_log
+  inject_false_loops: 0
 lidar_skip: 10  # downsample: randomly select a LiDAR point every [lidar_skip] points

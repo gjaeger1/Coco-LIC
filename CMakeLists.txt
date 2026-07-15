@@ -42,6 +42,15 @@ find_package(Ceres REQUIRED)
 find_package(OpenCV REQUIRED)
 find_package(PCL 1.13.0 REQUIRED)
 
+option(ENABLE_LOOP_CLOSURE "Build the loop-closure module (requires GTSAM)" ON)
+if(ENABLE_LOOP_CLOSURE)
+  find_package(GTSAM REQUIRED)
+  if(GTSAM_VERSION VERSION_LESS 4.1)
+    message(WARNING "GTSAM ${GTSAM_VERSION} < 4.1: robust_kernel 'gnc' will be unavailable; cauchy/dcs still work.")
+  endif()
+  add_definitions(-DENABLE_LOOP_CLOSURE)
+endif()
+
 # find_package(yaml-cpp REQUIRED)
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(YAML_CPP REQUIRED yaml-cpp>=0.5)
@@ -132,3 +141,7 @@ target_link_libraries(odometry_node
    ${thirdparty_libraries}
   #  fmt::fmt
 )
+
+if(ENABLE_LOOP_CLOSURE)
+  target_link_libraries(odometry_node gtsam)
+endif()
