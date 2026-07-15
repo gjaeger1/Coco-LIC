@@ -218,6 +218,8 @@ namespace cocolic
   void TrajectoryManager::PredictTrajectory(int64_t scan_time_min, int64_t scan_time_max,
                                             int64_t traj_max_time_ns, int knot_add_num, bool non_uniform)
   {
+    solve_failed_ = false;  // new frame, new chance
+
     if (imu_data_.empty() || imu_data_.size() == 1)
     {
       // LOG(ERROR) << "[AppendWithIMUData] IMU data empty! ";
@@ -307,6 +309,14 @@ namespace cocolic
     }
 
     ceres::Solver::Summary summary = estimator->Solve(50, false);
+    if (summary.termination_type == ceres::FAILURE)
+    {
+      // A residual or Jacobian evaluated to NaN/Inf and the solve was
+      // aborted; the trajectory state is whatever the last accepted iterate
+      // was. Flagged so UpdateLICPrior does not marginalize this state.
+      solve_failed_ = true;
+      std::cout << "[solver failure] trajectory init: " << summary.message << "\n";
+    }
     static int init_cnt = 0;
     init_cnt++;
     // LOG(INFO) << init_cnt << " TrajInitSolver " << summary.BriefReport();
@@ -425,6 +435,18 @@ namespace cocolic
 
     Eigen::Matrix<double, 6, 6> sqrt_info_mat = Eigen::LLT<Eigen::Matrix<double, 6, 6>>(covariance.inverse()).matrixL().transpose();
     sqrt_info_ << sqrt_info_mat(0, 0), sqrt_info_mat(1, 1), sqrt_info_mat(2, 2), sqrt_info_mat(3, 3), sqrt_info_mat(4, 4), sqrt_info_mat(5, 5);
+    if (!sqrt_info_.allFinite())
+    {
+      // No usable IMU sample pair fell inside [opt_min_t_ns, opt_max_t_ns)
+      // (e.g. an IMU dropout in the bag), so `covariance` stayed singular and
+      // its inverse is non-finite. A zero-information bias factor constrains
+      // nothing but keeps this solve and the marginalization in
+      // UpdateLICPrior (which reuses sqrt_info_) finite.
+      std::cout << "[bias factor] non-finite information in ["
+                << opt_min_t_ns << ", " << opt_max_t_ns
+                << ") ns, using zero information\n";
+      sqrt_info_.setZero();
+    }
     estimator->AddBiasFactor(para_bg_vec[0], para_bg_vec[1], para_ba_vec[0],
                              para_ba_vec[1], 1, sqrt_info_);
 
@@ -455,6 +477,14 @@ namespace cocolic
     TicToc t_opt;
     static int loam_cnt = 0;
     ceres::Solver::Summary summary = estimator->Solve(iteration, false);
+    if (summary.termination_type == ceres::FAILURE)
+    {
+      // A residual or Jacobian evaluated to NaN/Inf and the solve was
+      // aborted; the trajectory state is whatever the last accepted iterate
+      // was. Flagged so UpdateLICPrior does not marginalize this state.
+      solve_failed_ = true;
+      std::cout << "[solver failure] LIC update: " << summary.message << "\n";
+    }
     double opt_time = t_opt.toc();
     // LOG(INFO) << "[t_opt] " << opt_time << std::endl;
     // LOG(INFO) << "LoamSolver " << summary.BriefReport();
@@ -489,6 +519,16 @@ namespace cocolic
   void TrajectoryManager::UpdateLICPrior(
       const Eigen::aligned_vector<PointCorrespondence> &point_corrs)
   {
+    if (solve_failed_)
+    {
+      // Never fold the state of a failed solve into the prior: one
+      // non-finite value in its linearization would corrupt every subsequent
+      // solve. Keeping the previous prior loses this window's information,
+      // which is the acceptable cost.
+      std::cout << "[prior skipped] a solve failed this frame, keeping previous prior\n";
+      return;
+    }
+
     TrajectoryEstimatorOptions option;
     option.is_marg_state = true;
 
@@ -660,44 +700,55 @@ namespace cocolic
     if (process_cur_img_ && v_points_.size() != 0)
     {
       int64_t time_ns = cur_img_time_;
-      std::pair<int, double> su; // i和u
+      // GetIdxT leaves `su` untouched on failure (time outside the knot
+      // span); indexing blending_mats with an invalid segment reads out of
+      // bounds. Skip the image factors in that case — the rest of the prior
+      // is unaffected.
+      std::pair<int, double> su(-1, 0.0); // i和u
       trajectory_->GetIdxT(time_ns, su);
-      Eigen::Matrix4d blending_matrix = trajectory_->blending_mats[su.first - 3];
-      Eigen::Matrix4d cumulative_blending_matrix = trajectory_->cumu_blending_mats[su.first - 3];
-      std::vector<double *> vec;
-      estimator->AddControlPointsNURBS(su.first - 3, vec);
-      estimator->AddControlPointsNURBS(su.first - 3, vec, true);
-
-      std::vector<int> drop_set;
-      for (int i = 0; i < vec.size(); i++)
+      if (su.first < 3 || su.first - 3 >= (int)trajectory_->blending_mats.size())
       {
-        for (auto const &dp : drop_param)
+        std::cout << "[skip pnp marg] time " << time_ns
+                  << " ns has no valid spline segment\n";
+      }
+      else
+      {
+        Eigen::Matrix4d blending_matrix = trajectory_->blending_mats[su.first - 3];
+        Eigen::Matrix4d cumulative_blending_matrix = trajectory_->cumu_blending_mats[su.first - 3];
+        std::vector<double *> vec;
+        estimator->AddControlPointsNURBS(su.first - 3, vec);
+        estimator->AddControlPointsNURBS(su.first - 3, vec, true);
+
+        std::vector<int> drop_set;
+        for (int i = 0; i < vec.size(); i++)
         {
-          if (vec[i] == dp)
+          for (auto const &dp : drop_param)
           {
-            drop_set.emplace_back(i);
-            break;
+            if (vec[i] == dp)
+            {
+              drop_set.emplace_back(i);
+              break;
+            }
           }
         }
-      }
 
-      if (!drop_set.empty())
-      {
-        Eigen::Matrix3d K;
-        for (int i = 0; i < v_points_.size(); i++)
+        if (!drop_set.empty())
         {
-          ceres::CostFunction *cost_function = new analytic_derivative::PnPFactorNURBS(
-              time_ns, su,
-              blending_matrix, cumulative_blending_matrix,
-              v_points_[i], px_obss_[i],
-              trajectory_->GetSensorEP(CameraSensor).so3,
-              trajectory_->GetSensorEP(CameraSensor).p,
-              K_, opt_weight_.image_weight);
-          ceres::LossFunction *loss_function = NULL;
-          loss_function = new ceres::CauchyLoss(10.0); // adopted from vins-mono
-          ResidualBlockInfo *residual_block_info = new ResidualBlockInfo(RType_Image, cost_function, loss_function,
-                                                                         vec, drop_set);
-          marginalization_info->addResidualBlockInfo(residual_block_info);
+          for (int i = 0; i < v_points_.size(); i++)
+          {
+            ceres::CostFunction *cost_function = new analytic_derivative::PnPFactorNURBS(
+                time_ns, su,
+                blending_matrix, cumulative_blending_matrix,
+                v_points_[i], px_obss_[i],
+                trajectory_->GetSensorEP(CameraSensor).so3,
+                trajectory_->GetSensorEP(CameraSensor).p,
+                K_, opt_weight_.image_weight);
+            ceres::LossFunction *loss_function = NULL;
+            loss_function = new ceres::CauchyLoss(10.0); // adopted from vins-mono
+            ResidualBlockInfo *residual_block_info = new ResidualBlockInfo(RType_Image, cost_function, loss_function,
+                                                                           vec, drop_set);
+            marginalization_info->addResidualBlockInfo(residual_block_info);
+          }
         }
       }
     }

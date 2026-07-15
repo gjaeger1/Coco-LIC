@@ -90,6 +90,12 @@ namespace cocolic
 
     Eigen::Matrix<double, 6, 1> sqrt_info_;
 
+    // True if any Ceres solve of the current frame terminated with FAILURE
+    // (non-finite residual/Jacobian). UpdateLICPrior must not marginalize
+    // such a state: one non-finite value in the prior corrupts every
+    // subsequent solve. Reset at the start of each frame in PredictTrajectory.
+    bool solve_failed_ = false;
+
     int opt_cnt;
     double t_opt_sum;
 
