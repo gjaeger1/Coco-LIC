@@ -67,10 +67,11 @@ if(ENABLE_LOOP_CLOSURE)
   add_library(loop_lib
     src/loop/scan_context_detector.cpp
     src/loop/loop_verifier.cpp
+    src/loop/pose_graph.cpp
     ${SCANCONTEXT_SRC_DIR}/Scancontext.cpp
   )
   target_include_directories(loop_lib PRIVATE ${SCANCONTEXT_SRC_DIR})
-  target_link_libraries(loop_lib ${thirdparty_libraries})
+  target_link_libraries(loop_lib ${thirdparty_libraries} gtsam)
 endif()
 
 # find_package(yaml-cpp REQUIRED)
