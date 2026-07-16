@@ -786,6 +786,11 @@ namespace cocolic
     Drain3DGSBuffer(false);
   }
 
+  SE3d OdometryManager::CameraPoseForGs(int64_t time)
+  {
+    return trajectory_->GetCameraPoseNURBS(time);
+  }
+
   void OdometryManager::Drain3DGSBuffer(bool flush_all)
   {
     while(!time_buf.empty())
@@ -813,7 +818,7 @@ namespace cocolic
         // image
         odom_viewer_.Publish3DGSImage(img, time + trajectory_->GetDataStartTime());
 
-        auto pose_cam = trajectory_->GetCameraPoseNURBS(time);
+        auto pose_cam = CameraPoseForGs(time);
         auto inv_pose_cam = pose_cam.inverse();
         auto cam_K = camera_handler_->m_camera_intrinsic;
         double fx = cam_K(0, 0), fy = cam_K(1, 1);
@@ -947,7 +952,18 @@ namespace cocolic
     if (if_3dgs_export_)
     {
       Drain3DGSBuffer(true);
-      gs_exporter_.Finalize();
+      std::vector<std::pair<Eigen::Quaterniond, Eigen::Vector3d>> corrected;
+#ifdef ENABLE_LOOP_CLOSURE
+      if (loop_closure_manager_ && loop_closure_manager_->NumAcceptedLoops() > 0)
+      {
+        for (int64_t t_ns : gs_exporter_.FrameTimesNs())
+        {
+          SE3d T_wc = CameraPoseForGs(t_ns - trajectory_->GetDataStartTime());
+          corrected.emplace_back(T_wc.unit_quaternion(), T_wc.translation());
+        }
+      }
+#endif
+      gs_exporter_.Finalize(corrected);
     }
 
     std::string descri;

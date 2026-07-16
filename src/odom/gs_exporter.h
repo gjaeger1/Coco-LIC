@@ -25,6 +25,8 @@
 #include <sstream>
 #include <string>
 #include <vector>
+#include <utility>
+#include <cstring>
 
 #include <boost/filesystem.hpp>
 #include <opencv2/core.hpp>
@@ -38,6 +40,13 @@ namespace cocolic
   class GsExporter
   {
   public:
+    struct FramePose
+    {
+      int64_t t_ns;
+      Eigen::Quaterniond q;
+      Eigen::Vector3d t;
+    };
+
     void Init(const std::string &out_dir, const Eigen::Matrix3d &K)
     {
       out_dir_ = out_dir;
@@ -45,9 +54,6 @@ namespace cocolic
       namespace fs = boost::filesystem;
       fs::create_directories(fs::path(out_dir_) / "images");
       fs::create_directories(fs::path(out_dir_) / "depth");
-
-      pose_file_.open(out_dir_ + "/poses_tum.txt", std::ios::trunc);
-      pose_file_ << "# timestamp tx ty tz qx qy qz qw  (T_wc, OpenCV camera convention)\n";
 
       points_bin_path_ = out_dir_ + "/points3D.bin";
       points_file_.open(points_bin_path_, std::ios::binary | std::ios::trunc);
@@ -78,43 +84,32 @@ namespace cocolic
                   {cv::IMWRITE_PNG_COMPRESSION, 1});
       WriteNpy32f(out_dir_ + "/depth/" + name + ".npy", depth32f);
 
-      double t_s = t_ns * 1e-9;
-      char line[256];
-      std::snprintf(line, sizeof(line),
-                    "%.9f %.9f %.9f %.9f %.9f %.9f %.9f %.9f",
-                    t_s, t_wc.x(), t_wc.y(), t_wc.z(),
-                    q_wc.x(), q_wc.y(), q_wc.z(), q_wc.w());
-      pose_file_ << line << std::endl;  // std::endl: flush so file is always usable
+      // Store per frame: t_ns and the drain-time pose (q_wc, t_wc)
+      frames_.push_back({t_ns, q_wc, t_wc});
 
-      // frame entry for transforms.json: OpenCV c2w -> OpenGL c2w (negate col 1, 2)
-      Eigen::Matrix4d c2w = Eigen::Matrix4d::Identity();
-      c2w.block<3, 3>(0, 0) = q_wc.toRotationMatrix();
-      c2w.block<3, 1>(0, 3) = t_wc;
-      c2w.block<3, 1>(0, 1) *= -1.0;
-      c2w.block<3, 1>(0, 2) *= -1.0;
-      std::ostringstream fjson;
-      fjson.precision(17);
-      fjson << "    {\n"
-            << "      \"file_path\": \"images/" << name << ".png\",\n"
-            << "      \"depth_file_path\": \"depth/" << name << ".npy\",\n"
-            << "      \"transform_matrix\": [";
-      for (int r = 0; r < 4; ++r)
-      {
-        fjson << (r ? ", [" : "[");
-        for (int c = 0; c < 4; ++c)
-          fjson << (c ? ", " : "") << c2w(r, c);
-        fjson << "]";
-      }
-      fjson << "],\n"
-            << "      \"timestamp\": " << t_s << "\n    }";
-      frame_entries_.push_back(fjson.str());
+      // Transform points to the camera frame before writing to binary:
+      // p_cam = q_wc.conjugate() * (p_world - t_wc)
+      Eigen::Quaterniond q_wc_conj = q_wc.conjugate();
+      uint32_t f_idx = static_cast<uint32_t>(frame_idx_);
 
       for (size_t i = 0; i < points.size(); ++i)
       {
-        float xyz[3] = {(float)points[i].x(), (float)points[i].y(), (float)points[i].z()};
-        uint8_t rgb[3] = {(uint8_t)colors_rgb[i].x(), (uint8_t)colors_rgb[i].y(),
-                          (uint8_t)colors_rgb[i].z()};
-        points_file_.write(reinterpret_cast<const char *>(xyz), 12);
+        Eigen::Vector3d p_world(points[i].x(), points[i].y(), points[i].z());
+        Eigen::Vector3d p_cam = q_wc_conj * (p_world - t_wc);
+
+        float xyz_cam[3] = {
+          static_cast<float>(p_cam.x()),
+          static_cast<float>(p_cam.y()),
+          static_cast<float>(p_cam.z())
+        };
+        uint8_t rgb[3] = {
+          static_cast<uint8_t>(colors_rgb[i].x()),
+          static_cast<uint8_t>(colors_rgb[i].y()),
+          static_cast<uint8_t>(colors_rgb[i].z())
+        };
+
+        points_file_.write(reinterpret_cast<const char *>(&f_idx), 4);
+        points_file_.write(reinterpret_cast<const char *>(xyz_cam), 12);
         points_file_.write(reinterpret_cast<const char *>(rgb), 3);
       }
       num_points_ += points.size();
@@ -122,13 +117,63 @@ namespace cocolic
       frame_idx_++;
     }
 
-    void Finalize()
+    // corrected_T_wc: per exported frame (same order as AddFrame calls), the
+    // final camera->world pose to bake into all outputs. Empty vector: use the
+    // poses captured at AddFrame time (odometry-only behavior, and the
+    // fallback when loop closure is disabled).
+    void Finalize(const std::vector<std::pair<Eigen::Quaterniond, Eigen::Vector3d>>
+                      &corrected_T_wc = {})
     {
       if (!enabled_ || finalized_) return;
       finalized_ = true;
-      pose_file_.close();
       points_file_.close();
 
+      // Choose pose source
+      std::vector<std::pair<Eigen::Quaterniond, Eigen::Vector3d>> chosen_poses;
+      if (!corrected_T_wc.empty())
+      {
+        if (corrected_T_wc.size() != frames_.size())
+        {
+          std::cerr << "GsExporter error: corrected_T_wc size (" << corrected_T_wc.size()
+                    << ") does not match frames size (" << frames_.size()
+                    << "). Falling back to stored poses." << std::endl;
+          chosen_poses.reserve(frames_.size());
+          for (const auto &f : frames_)
+            chosen_poses.emplace_back(f.q, f.t);
+        }
+        else
+        {
+          chosen_poses = corrected_T_wc;
+        }
+      }
+      else
+      {
+        chosen_poses.reserve(frames_.size());
+        for (const auto &f : frames_)
+          chosen_poses.emplace_back(f.q, f.t);
+      }
+
+      // Write poses_tum.txt
+      std::ofstream pose_file(out_dir_ + "/poses_tum.txt", std::ios::trunc);
+      if (pose_file.is_open())
+      {
+        pose_file << "# timestamp tx ty tz qx qy qz qw  (T_wc, OpenCV camera convention)\n";
+        for (size_t i = 0; i < frames_.size(); ++i)
+        {
+          double t_s = frames_[i].t_ns * 1e-9;
+          const auto &t_wc = chosen_poses[i].second;
+          const auto &q_wc = chosen_poses[i].first;
+          char line[256];
+          std::snprintf(line, sizeof(line),
+                        "%.9f %.9f %.9f %.9f %.9f %.9f %.9f %.9f",
+                        t_s, t_wc.x(), t_wc.y(), t_wc.z(),
+                        q_wc.x(), q_wc.y(), q_wc.z(), q_wc.w());
+          pose_file << line << "\n";
+        }
+        pose_file.close();
+      }
+
+      // Write transforms.json
       std::ofstream tf(out_dir_ + "/transforms.json", std::ios::trunc);
       tf.precision(17);
       tf << "{\n"
@@ -142,27 +187,114 @@ namespace cocolic
          << "  \"k1\": 0.0, \"k2\": 0.0, \"p1\": 0.0, \"p2\": 0.0,\n"
          << "  \"ply_file_path\": \"points3D.ply\",\n"
          << "  \"frames\": [\n";
-      for (size_t i = 0; i < frame_entries_.size(); ++i)
-        tf << frame_entries_[i] << (i + 1 < frame_entries_.size() ? ",\n" : "\n");
+
+      for (size_t i = 0; i < frames_.size(); ++i)
+      {
+        char name[32];
+        std::snprintf(name, sizeof(name), "frame_%05d", (int)i);
+        double t_s = frames_[i].t_ns * 1e-9;
+        const auto &q_wc = chosen_poses[i].first;
+        const auto &t_wc = chosen_poses[i].second;
+
+        // OpenCV c2w -> OpenGL c2w (negate col 1, 2)
+        Eigen::Matrix4d c2w = Eigen::Matrix4d::Identity();
+        c2w.block<3, 3>(0, 0) = q_wc.toRotationMatrix();
+        c2w.block<3, 1>(0, 3) = t_wc;
+        c2w.block<3, 1>(0, 1) *= -1.0;
+        c2w.block<3, 1>(0, 2) *= -1.0;
+
+        tf << "    {\n"
+           << "      \"file_path\": \"images/" << name << ".png\",\n"
+           << "      \"depth_file_path\": \"depth/" << name << ".npy\",\n"
+           << "      \"transform_matrix\": [";
+        for (int r = 0; r < 4; ++r)
+        {
+          tf << (r ? ", [" : "[");
+          for (int c = 0; c < 4; ++c)
+            tf << (c ? ", " : "") << c2w(r, c);
+          tf << "]";
+        }
+        tf << "],\n"
+           << "      \"timestamp\": " << t_s << "\n"
+           << "    }" << (i + 1 < frames_.size() ? ",\n" : "\n");
+      }
       tf << "  ]\n}\n";
       tf.close();
 
+      // Assemble points3D.ply
       std::ofstream ply(out_dir_ + "/points3D.ply", std::ios::binary | std::ios::trunc);
       ply << "ply\nformat binary_little_endian 1.0\n"
           << "element vertex " << num_points_ << "\n"
           << "property float x\nproperty float y\nproperty float z\n"
           << "property uchar red\nproperty uchar green\nproperty uchar blue\n"
           << "end_header\n";
+
       if (num_points_ > 0)
       {
         std::ifstream bin(points_bin_path_, std::ios::binary);
-        ply << bin.rdbuf();
+        if (bin.is_open())
+        {
+          // Read in chunks of 50000 points
+          const size_t record_size = 19;
+          const size_t chunk_points = 50000;
+          std::vector<char> buffer(chunk_points * record_size);
+
+          while (bin)
+          {
+            bin.read(buffer.data(), buffer.size());
+            std::streamsize bytes_read = bin.gcount();
+            size_t num_records = bytes_read / record_size;
+            if (num_records == 0) break;
+
+            std::vector<char> write_buffer(num_records * 15);
+            for (size_t r = 0; r < num_records; ++r)
+            {
+              const char *ptr = buffer.data() + r * record_size;
+              uint32_t f_idx = *reinterpret_cast<const uint32_t *>(ptr);
+              const float *xyz_cam = reinterpret_cast<const float *>(ptr + 4);
+              const uint8_t *rgb = reinterpret_cast<const uint8_t *>(ptr + 16);
+
+              Eigen::Vector3d p_cam(xyz_cam[0], xyz_cam[1], xyz_cam[2]);
+              
+              // Transform by chosen pose of the corresponding frame index
+              Eigen::Quaterniond q_wc = Eigen::Quaterniond::Identity();
+              Eigen::Vector3d t_wc = Eigen::Vector3d::Zero();
+              if (f_idx < chosen_poses.size())
+              {
+                q_wc = chosen_poses[f_idx].first;
+                t_wc = chosen_poses[f_idx].second;
+              }
+              Eigen::Vector3d p_world = q_wc * p_cam + t_wc;
+
+              float xyz_world[3] = {
+                static_cast<float>(p_world.x()),
+                static_cast<float>(p_world.y()),
+                static_cast<float>(p_world.z())
+              };
+
+              char *wptr = write_buffer.data() + r * 15;
+              std::memcpy(wptr, xyz_world, 12);
+              std::memcpy(wptr + 12, rgb, 3);
+            }
+            ply.write(write_buffer.data(), num_records * 15);
+          }
+          bin.close();
+        }
       }
       ply.close();
       boost::filesystem::remove(points_bin_path_);
 
       std::cout << "\n🍺 GsExporter finalized: " << frame_idx_ << " frames, "
                 << num_points_ << " points -> " << out_dir_ << "\n";
+    }
+
+    const std::vector<int64_t> FrameTimesNs() const
+    {
+      std::vector<int64_t> times;
+      times.reserve(frames_.size());
+      for (const auto &f : frames_)
+        times.push_back(f.t_ns);
+      return times;
     }
 
   private:
@@ -192,9 +324,8 @@ namespace cocolic
     int img_w_ = 0, img_h_ = 0;
     int frame_idx_ = 0;
     size_t num_points_ = 0;
-    std::ofstream pose_file_;
     std::ofstream points_file_;
-    std::vector<std::string> frame_entries_;
+    std::vector<FramePose> frames_;
   };
 
 } // namespace cocolic

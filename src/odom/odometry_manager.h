@@ -137,6 +137,8 @@ namespace cocolic
 
     void Drain3DGSBuffer(bool flush_all);
 
+    SE3d CameraPoseForGs(int64_t time);
+
   protected:
     OdometryMode odometry_mode_;
 
