@@ -1,6 +1,7 @@
 #include "loop_closure_manager.h"
 #include "scan_context_detector.h"
 #include "pose_graph.h"
+#include "trajectory_deformer.h"
 
 #include <boost/filesystem.hpp>
 #include <iostream>
@@ -165,6 +166,52 @@ namespace cocolic
   size_t LoopClosureManager::NumAcceptedLoops() const
   {
     return pose_graph_ ? pose_graph_->NumLoops() : 0;
+  }
+
+  size_t LoopClosureManager::ApplyCorrectionsToTrajectory(
+      const std::vector<KeyframeCorrection> &corrections)
+  {
+    if (corrections.empty()) return 0;
+    const size_t n = std::min(trajectory_->numKnots(), trajectory_->knts.size());
+
+    // Copy out, deform with the pure function, write back. The copy keeps
+    // trajectory_deformer free of spline dependencies (host-testable).
+    std::vector<int64_t> times(trajectory_->knts.begin(), trajectory_->knts.begin() + n);
+    std::vector<SO3d> Rs(n);
+    std::vector<Eigen::Vector3d> ps(n);
+    for (size_t i = 0; i < n; ++i)
+    {
+      Rs[i] = trajectory_->getKnotSO3(i);
+      ps[i] = trajectory_->getKnotPos(i);
+    }
+
+    DeformKnots(times, Rs, ps, corrections);
+
+    for (size_t i = 0; i < n; ++i)
+    {
+      trajectory_->setKnotSO3(Rs[i], i);
+      trajectory_->setKnotPos(ps[i], i);
+    }
+    return n;
+  }
+
+  void LoopClosureManager::WriteOdomTum()
+  {
+    if (!config_.enable || snapshots_.empty()) return;
+    std::ofstream odom_file(log_dir_ + "/poses_odom_tum.txt");
+    if (odom_file.is_open())
+    {
+      for (const auto &kf : snapshots_)
+      {
+        Eigen::Quaterniond q = kf.T_LtoG_odom.unit_quaternion();
+        Eigen::Vector3d t = kf.T_LtoG_odom.translation();
+        odom_file << std::fixed << std::setprecision(9)
+                  << (double)kf.time_ns * 1e-9 << " "
+                  << t.x() << " " << t.y() << " " << t.z() << " "
+                  << q.x() << " " << q.y() << " " << q.z() << " " << q.w() << "\n";
+      }
+      odom_file.close();
+    }
   }
 
 } // namespace cocolic

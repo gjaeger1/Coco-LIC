@@ -39,6 +39,15 @@ namespace cocolic
     // Also writes poses_pgo_tum.txt and flushes the log. Idempotent.
     std::vector<KeyframeCorrection> Finalize();
 
+    // Applies `corrections` to the spline in place (finalize-time deformation).
+    // Call exactly once, after the bag ends and before any pose is saved or
+    // exported. Returns the number of control points modified.
+    size_t ApplyCorrectionsToTrajectory(
+        const std::vector<KeyframeCorrection> &corrections);
+
+    // Writes the uncorrected odometry keyframe poses to poses_odom_tum.txt.
+    void WriteOdomTum();
+
     const std::vector<KeyframeSnapshot> &Snapshots() const { return snapshots_; }
     size_t NumAcceptedLoops() const;
 

@@ -927,7 +927,20 @@ namespace cocolic
   {
 #ifdef ENABLE_LOOP_CLOSURE
     if (loop_closure_manager_)
-      loop_closure_manager_->Finalize();  // corrections consumed in a later change
+    {
+      // Write uncorrected odometry keyframe poses first.
+      loop_closure_manager_->WriteOdomTum();
+
+      // Solve the pose graph and correct the spline BEFORE anything reads it.
+      // In shadow mode this is the only moment corrections exist at all.
+      auto corrections = loop_closure_manager_->Finalize();
+      if (!corrections.empty())
+      {
+        size_t n = loop_closure_manager_->ApplyCorrectionsToTrajectory(corrections);
+        std::cout << "🔁 LoopClosure: deformed " << n << " control points ("
+                  << corrections.size() << " keyframe corrections)\n";
+      }
+    }
 #endif
     // flush frames still waiting for their spline segment (the fully optimized
     // trajectory is available now), then finish the 3DGS dataset
