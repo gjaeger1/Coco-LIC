@@ -139,6 +139,13 @@ namespace cocolic
       gs_exporter_.Init(gs_export_path, K_);
     }
 
+#ifdef ENABLE_LOOP_CLOSURE
+    LoopClosureConfig lc_config = LoopClosureConfig::FromYaml(node);
+    if (lc_config.enable)
+      loop_closure_manager_.reset(new LoopClosureManager(
+          lc_config, trajectory_, lidar_handler_, cache_path_));
+#endif
+
     std::cout << std::fixed << std::setprecision(4);
     // LOG(INFO) << std::fixed << std::setprecision(4);
   }
@@ -306,6 +313,14 @@ namespace cocolic
     int active_idx = trajectory_->numKnots() - 1 - cp_add_num_cur - 2;
     trajectory_->SetActiveTime(trajectory_->knts[active_idx]);
     lidar_handler_->UpdateLidarSubMap();
+
+#ifdef ENABLE_LOOP_CLOSURE
+    // On a failed solve the spline holds the last accepted iterate; leave the
+    // keyframe times queued and snapshot them on the next healthy frame.
+    if (loop_closure_manager_ && !trajectory_manager_->solve_failed_)
+      for (int64_t kf_time : lidar_handler_->TakeNewKeyframeTimes())
+        loop_closure_manager_->OnKeyframe(kf_time);
+#endif
 
     /// [4] update visual local map（tracking map points for the current image frame）
     // after upate, m_map_rgb_pts_in_last_frame_pos = m_map_rgb_pts_in_current_frame_pos
@@ -910,6 +925,10 @@ namespace cocolic
 
   double OdometryManager::SaveOdometry()
   {
+#ifdef ENABLE_LOOP_CLOSURE
+    if (loop_closure_manager_)
+      loop_closure_manager_->Finalize();  // corrections consumed in a later change
+#endif
     // flush frames still waiting for their spline segment (the fully optimized
     // trajectory is available now), then finish the 3DGS dataset
     if (if_3dgs_export_)

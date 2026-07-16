@@ -29,6 +29,10 @@
 #include <imu/imu_initializer.h>
 #include <lidar/lidar_handler.h>
 
+#ifdef ENABLE_LOOP_CLOSURE
+#include <loop/loop_closure_manager.h>
+#endif
+
 #include <condition_variable>
 #include <mutex>
 #include <thread>
@@ -216,6 +220,10 @@ namespace cocolic
     std::queue<LiDARFeature> lidar_buf;  // lidarfeature in local
     std::queue<cv::Mat> img_buf;  // undistorted
     std::vector<PosCloud::Ptr> lidarpoints;
+
+#ifdef ENABLE_LOOP_CLOSURE
+    std::unique_ptr<LoopClosureManager> loop_closure_manager_;
+#endif
   };
 
 } // namespace cocolic

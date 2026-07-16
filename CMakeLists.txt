@@ -69,6 +69,7 @@ if(ENABLE_LOOP_CLOSURE)
     src/loop/loop_verifier.cpp
     src/loop/pose_graph.cpp
     src/loop/trajectory_deformer.cpp
+    src/loop/loop_closure_manager.cpp
     ${SCANCONTEXT_SRC_DIR}/Scancontext.cpp
   )
   target_include_directories(loop_lib PRIVATE ${SCANCONTEXT_SRC_DIR})
@@ -167,5 +168,5 @@ target_link_libraries(odometry_node
 )
 
 if(ENABLE_LOOP_CLOSURE)
-  target_link_libraries(odometry_node gtsam)
+  target_link_libraries(odometry_node loop_lib gtsam)
 endif()
