@@ -8,6 +8,8 @@
 #include <utils/mypcl_cloud_type.h>   // PosCloud
 #include <utils/parameter_struct.h>   // SE3d (Sophus)
 
+#include "trajectory_deformer.h"
+
 namespace cocolic
 {
 
@@ -46,14 +48,6 @@ namespace cocolic
     SE3d T_match_query;              // pose of query keyframe expressed in the match keyframe's LiDAR frame
     Eigen::Matrix<double, 6, 6> information = Eigen::Matrix<double, 6, 6>::Identity();
     bool injected = false;           // true only for deliberately wrong research-tool loops
-  };
-
-  // Result of a pose-graph solve for one keyframe.
-  struct KeyframeCorrection
-  {
-    int64_t time_ns = -1;
-    SE3d delta;                      // left-multiplicative world-frame correction:
-                                     // T_corrected = delta * T_odom
   };
 
 } // namespace cocolic

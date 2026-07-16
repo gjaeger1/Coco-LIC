@@ -68,6 +68,7 @@ if(ENABLE_LOOP_CLOSURE)
     src/loop/scan_context_detector.cpp
     src/loop/loop_verifier.cpp
     src/loop/pose_graph.cpp
+    src/loop/trajectory_deformer.cpp
     ${SCANCONTEXT_SRC_DIR}/Scancontext.cpp
   )
   target_include_directories(loop_lib PRIVATE ${SCANCONTEXT_SRC_DIR})
