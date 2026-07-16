@@ -7,6 +7,7 @@
 #include <iostream>
 #include <iomanip>
 #include <stdexcept>
+#include <random>
 
 namespace cocolic
 {
@@ -78,7 +79,7 @@ namespace cocolic
     }
   }
 
-  void LoopClosureManager::LogCandidate(const LoopCandidate &c, const VerificationReport &r)
+  void LoopClosureManager::LogCandidate(const LoopCandidate &c, const VerificationReport &r, bool injected)
   {
     if (!log_.is_open()) return;
 
@@ -92,7 +93,8 @@ namespace cocolic
          << ", \"icp_fitness\": " << r.icp_fitness
          << ", \"overlap_ratio\": " << r.overlap_ratio
          << ", \"accepted\": " << (r.accepted ? "true" : "false")
-         << ", \"rejected_by\": \"" << r.rejected_by << "\"}"
+         << ", \"rejected_by\": \"" << r.rejected_by << "\""
+         << ", \"injected\": " << (injected ? "true" : "false") << "}"
          << std::endl;
   }
 
@@ -102,6 +104,58 @@ namespace cocolic
     finalized_ = true;
 
     if (snapshots_.empty()) return {};
+
+    // Deterministic adversary for robustness research: inject N wrong loop
+    // constraints between far-apart keyframes with a random relative pose.
+    if (config_.inject_false_loops > 0 &&
+        snapshots_.size() > 2 * config_.min_index_gap)
+    {
+      if (!config_.shadow_mode)
+      {
+        std::cout << "⚠️ Warning: [LoopClosureManager] Skipped false-loop injection because shadow_mode is false (active feedback mode)." << std::endl;
+      }
+      else
+      {
+        std::mt19937 rng(42);  // fixed seed: same bag + config -> same injected loops
+        std::uniform_int_distribution<int> dist_q(config_.min_index_gap, snapshots_.size() - 1);
+        std::uniform_real_distribution<double> dist_angle(-M_PI, M_PI);
+        std::uniform_real_distribution<double> dist_xy(-10.0, 10.0);
+        std::uniform_real_distribution<double> dist_z(-2.0, 2.0);
+
+        for (int k = 0; k < config_.inject_false_loops; ++k)
+        {
+          int q = dist_q(rng);
+          std::uniform_int_distribution<int> dist_m(0, q - config_.min_index_gap);
+          int m = dist_m(rng);
+
+          LoopConstraint c;
+          c.query_index = q;
+          c.match_index = m;
+          c.T_match_query = SE3d(Eigen::Quaterniond(Eigen::AngleAxisd(
+                                     dist_angle(rng), Eigen::Vector3d::UnitZ())),
+                                 Eigen::Vector3d(dist_xy(rng),
+                                                 dist_xy(rng),
+                                                 dist_z(rng)));
+          c.information = Eigen::Matrix<double, 6, 6>::Identity() * 10.0;  // confidently wrong
+          c.injected = true;
+          pose_graph_->AddLoop(c);
+
+          LoopCandidate cand;
+          cand.query_index = q;
+          cand.match_index = m;
+          cand.descriptor_score = -1.0;
+          cand.yaw_init = 0.0;
+
+          VerificationReport rep;
+          rep.accepted = true;
+          rep.icp_fitness = -1.0;
+          rep.overlap_ratio = -1.0;
+          rep.rejected_by = "";
+
+          LogCandidate(cand, rep, true);
+        }
+      }
+    }
 
     if (NumAcceptedLoops() == 0)
     {

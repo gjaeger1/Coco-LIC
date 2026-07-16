@@ -52,7 +52,7 @@ namespace cocolic
     size_t NumAcceptedLoops() const;
 
   private:
-    void LogCandidate(const LoopCandidate &c, const VerificationReport &r);
+    void LogCandidate(const LoopCandidate &c, const VerificationReport &r, bool injected = false);
 
     LoopClosureConfig config_;
     std::shared_ptr<Trajectory> trajectory_;
