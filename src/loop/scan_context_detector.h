@@ -7,9 +7,11 @@
 namespace cocolic
 {
 
-  // LoopDetector backed by Scan Context (Kim et al.). Descriptor database and
-  // keyframe indices stay aligned because AddAndQuery is called once per
-  // keyframe in order (interface contract).
+  // LoopDetector backed by Scan Context (Kim et al.). The Scan Context ring
+  // database is keyed by insertion order, which only equals the keyframe
+  // (snapshot) index when every keyframe is inserted. With detection_stride > 1
+  // the caller invokes AddAndQuery on a subset, so db_to_snapshot_ maps the
+  // returned database index back to the snapshot index.
   class ScanContextDetector : public LoopDetector
   {
   public:
@@ -22,6 +24,7 @@ namespace cocolic
   private:
     SCManager sc_;
     int min_index_gap_;
+    std::vector<int> db_to_snapshot_;  // Scan Context DB index -> kf.index
   };
 
 } // namespace cocolic
