@@ -86,10 +86,14 @@ namespace cocolic
   {
     if (!log_.is_open()) return;
 
+    // Log absolute (sensor-epoch) timestamps, not trajectory-relative ones, so
+    // the JSONL is directly comparable to epoch-based ground truth (data_start
+    // is the bag/sensor epoch offset in ns; keyframe time_ns is relative to it).
+    const int64_t t0 = trajectory_->GetDataStartTime();
     log_ << "{\"query\": " << c.query_index
          << ", \"match\": " << c.match_index
-         << ", \"t_query_ns\": " << snapshots_[c.query_index].time_ns
-         << ", \"t_match_ns\": " << snapshots_[c.match_index].time_ns
+         << ", \"t_query_ns\": " << (snapshots_[c.query_index].time_ns + t0)
+         << ", \"t_match_ns\": " << (snapshots_[c.match_index].time_ns + t0)
          << ", \"detector\": \"" << config_.detector << "\""
          << ", \"descriptor_score\": " << c.descriptor_score
          << ", \"yaw_init\": " << c.yaw_init
