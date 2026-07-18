@@ -1,0 +1,74 @@
+odometry_mode: 1  # LIO = 0, LICO = 1  (LICO so camera images reach the visual loop detector)
+
+lidar_yaml: /lissabon/lidar.yaml
+imu_yaml: /lissabon/imu.yaml
+camera_yaml: /lissabon/camera_zed2i.yaml
+
+bag_path: /path/to/xxx.bag
+bag_start: 0.
+bag_durr: -1
+
+
+### SplineParams ###
+t_add: 0.1  # [s] trajectory is updated every delta_t seconds, no adjustment needed
+distance0: 0.03  # [s] the time duration corresponding to the first 4 control points, no adjustment needed
+non_uniform: true  # true for non-uniform b-spline, false for uniform b-spline
+division_coarse: 1  # if it is uniform, decide how many control points to place in every delta_t seconds, must be a non-zero integer
+
+
+### OptimizationParams ###
+t_begin_add_cam: 5.0  # [s] visual constraints will be added after the system has been successfully initialized for a while
+lidar_iter: 2
+use_lidar_scale: true  # scale the lidar weight
+lidar_weight: 500.0
+# NOTE: image_weight ~ 0 on purpose. We lack the ZED2i factory calibration, so
+# the visual factors would corrupt the trajectory. Down-weighting them keeps the
+# odometry LiDAR-inertial (stable) while the decoded images still flow to the
+# VisualBoWDetector -- this validates that the camera VPR path fires real loops.
+# Restore image_weight ~ 4 once the real ZED2i calibration is in camera_zed2i.yaml.
+image_weight: 0.001
+# imu：BMI088（200Hz）
+gyroscope_noise_density: 3.45557556e-03
+gyroscope_random_walk: 2.617993833e-07
+accelerometer_noise_density: 2.425376259e-02
+accelerometer_random_walk: 1.96e-06
+
+
+### EvalutaionParams ###
+is_evo_viral: false
+
+
+### Gaussian-LIC ###
+if_3dgs: false
+if_3dgs_export: false
+gs_export_path: "/data/gs_export"
+
+loop_closure:
+  enable: true
+  shadow_mode: true
+  detectors: [visual_bow, spatial]   # camera VPR + odometry-spatial; LiDAR only verifies
+  detector: scan_context             # legacy fallback (unused when detectors is non-empty)
+  min_index_gap: 20                  # short sequence (~152 s): allow nearer-in-time revisits
+  detection_stride: 1
+  visual_bow:
+    vocab_path: /home/ubuntu/Software/ORBvoc.txt
+    num_features: 1000
+    score_min: 0.015
+    max_candidates: 3
+  spatial:
+    search_radius_m: 15.0            # revisit may be several metres off after drift
+  verifier:
+    icp_fitness_max: 0.3
+    overlap_ratio_min: 0.6
+    submap_half_size: 12
+  pgo:
+    robust_kernel: cauchy
+    odom_rotation_sigma_deg: 0.5
+    odom_translation_sigma_m: 0.05
+    rp_information_scale: 100.0
+    backbone_dt_s: 0.4
+    loop_robust_cauchy: 1.0
+    loop_max_iterations: 30
+  log_dir: ""
+  inject_false_loops: 0
+lidar_skip: 10  # downsample: randomly select a LiDAR point every [lidar_skip] points

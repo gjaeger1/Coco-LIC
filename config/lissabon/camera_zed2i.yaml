@@ -1,0 +1,30 @@
+%YAML:1.0
+
+# ZED2i on the Lisbon Livox-HAP handheld rig. Topic + resolution are confirmed
+# from the bag (/zed2i/image, rgb8 1920x1080, raw sensor_msgs/Image). The
+# intrinsics/extrinsics below are PLACEHOLDERS (no factory calibration on hand);
+# they are only used by the LICO visual factors, which the VPR-validation config
+# down-weights (image_weight ~ 0), so the odometry stays LiDAR-inertial while the
+# images still flow to the visual loop detector. Replace with the real ZED2i
+# calibration for an accurate LICO run.
+image_topic: /zed2i/image  # raw sensor_msgs/Image; code also tries <topic>/compressed
+
+image_width: 1920
+image_height: 1080
+cam_fx: 1050.0
+cam_fy: 1050.0
+cam_cx: 960.0
+cam_cy: 540.0
+cam_d0: 0.0
+cam_d1: 0.0
+cam_d2: 0.0
+cam_d3: 0.0
+cam_d4: 0.0
+
+CameraExtrinsics:  # camera to imu (PLACEHOLDER)
+    Trans: [0.0, 0.0, 0.0]
+    Rot: [ 0.0,  0.0, 1.0,
+          -1.0,  0.0, 0.0,
+           0.0, -1.0, 0.0]
+
+img_time_offset: 0.0  # camera to imu [s]
