@@ -2,7 +2,7 @@ odometry_mode: 1  # LIO = 0, LICO = 1  (LICO so camera images reach the visual l
 
 lidar_yaml: /lissabon/lidar.yaml
 imu_yaml: /lissabon/imu.yaml
-camera_yaml: /lissabon/camera_zed2i.yaml
+camera_yaml: /lissabon/camera_zed2i.yaml  # 0713 bags have /zed2i/image (more stable than 0714 gimbal)
 
 bag_path: /path/to/xxx.bag
 bag_start: 0.

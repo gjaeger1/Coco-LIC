@@ -691,11 +691,13 @@ namespace cocolic
       cv::resize(image_buf_.back().image, image_buf_.back().image, cv::Size(640, 512), 0, 0, cv::INTER_LINEAR);
     }
 
-    // // for tiers
-    // if (image_buf_.back().image.cols == 1920)
-    // {
-    //   cv::resize(image_buf_.back().image, image_buf_.back().image, cv::Size(960, 540), 0, 0, cv::INTER_LINEAR);
-    // }
+    // Lisbon Livox-HAP rig (ZED2i / RealSense @ 1920x1080): downscale to 960x540
+    // (keeps 16:9) so LICO keeps up in offline replay and the intrinsics in
+    // camera_realsense.yaml / camera_zed2i.yaml (960x540) match.
+    if (image_buf_.back().image.cols == 1920)
+    {
+      cv::resize(image_buf_.back().image, image_buf_.back().image, cv::Size(960, 540), 0, 0, cv::INTER_LINEAR);
+    }
   }
 
   void MsgManager::ImageMsgHandle(const sensor_msgs::CompressedImageConstPtr &msg)
@@ -728,12 +730,11 @@ namespace cocolic
       cv::resize(image_buf_.back().image, image_buf_.back().image, cv::Size(640, 512), 0, 0, cv::INTER_LINEAR);
     }
 
-    // // for mars
-    // if (image_buf_.back().image.cols == 2448)
-    // {
-    //   // cv::resize(image_buf_.back().image, image_buf_.back().image, cv::Size(1224, 1024), 0, 0, cv::INTER_LINEAR);
-    //   cv::resize(image_buf_.back().image, image_buf_.back().image, cv::Size(612, 512), 0, 0, cv::INTER_LINEAR);
-    // }
+    // Lisbon rig @ 1920x1080 (see raw-image handler above): downscale to 960x540.
+    if (image_buf_.back().image.cols == 1920)
+    {
+      cv::resize(image_buf_.back().image, image_buf_.back().image, cv::Size(960, 540), 0, 0, cv::INTER_LINEAR);
+    }
   }
 
 } // namespace cocolic

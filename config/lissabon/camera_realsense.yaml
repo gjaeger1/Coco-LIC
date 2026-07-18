@@ -1,0 +1,31 @@
+%YAML:1.0
+
+# RealSense on the Lisbon Livox-HAP handheld rig (0714 gimbal bag). Topic +
+# native resolution confirmed from the bag: /realsense/image, rgb8 1920x1080.
+# msg_manager downscales 1920 -> 960x540, so the intrinsics below are for 960x540.
+# These are ESTIMATED from nominal RealSense-D4xx 1080p values (fx=fy~1385,
+# cx~960, cy~540) halved to 960x540; replace with the real factory calibration
+# for an accurate LICO run. The VPR-validation config keeps image_weight ~ 0, so
+# these only need to be plausible enough not to destabilise; the images still
+# flow to the VisualBoWDetector for place recognition.
+image_topic: /realsense/image  # raw sensor_msgs/Image; code also tries <topic>/compressed
+
+image_width: 960
+image_height: 540
+cam_fx: 692.0
+cam_fy: 692.0
+cam_cx: 480.0
+cam_cy: 270.0
+cam_d0: 0.0
+cam_d1: 0.0
+cam_d2: 0.0
+cam_d3: 0.0
+cam_d4: 0.0
+
+CameraExtrinsics:  # camera to imu (PLACEHOLDER)
+    Trans: [0.0, 0.0, 0.0]
+    Rot: [ 0.0,  0.0, 1.0,
+          -1.0,  0.0, 0.0,
+           0.0, -1.0, 0.0]
+
+img_time_offset: 0.0  # camera to imu [s]

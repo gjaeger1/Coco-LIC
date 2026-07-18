@@ -9,12 +9,14 @@
 # calibration for an accurate LICO run.
 image_topic: /zed2i/image  # raw sensor_msgs/Image; code also tries <topic>/compressed
 
-image_width: 1920
-image_height: 1080
-cam_fx: 1050.0
-cam_fy: 1050.0
-cam_cx: 960.0
-cam_cy: 540.0
+# msg_manager downscales 1920 -> 960x540; intrinsics below are for 960x540
+# (nominal ZED2i-1080p fx~1050 halved). PLACEHOLDER; replace with real calib.
+image_width: 960
+image_height: 540
+cam_fx: 525.0
+cam_fy: 525.0
+cam_cx: 480.0
+cam_cy: 270.0
 cam_d0: 0.0
 cam_d1: 0.0
 cam_d2: 0.0
