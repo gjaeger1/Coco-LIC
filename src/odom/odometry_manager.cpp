@@ -318,8 +318,8 @@ namespace cocolic
     // On a failed solve the spline holds the last accepted iterate; leave the
     // keyframe times queued and snapshot them on the next healthy frame.
     if (loop_closure_manager_ && !trajectory_manager_->solve_failed_)
-      for (int64_t kf_time : lidar_handler_->TakeNewKeyframeTimes())
-        loop_closure_manager_->OnKeyframe(kf_time);
+      for (const auto &kf : lidar_handler_->TakeNewKeyframes())
+        loop_closure_manager_->OnKeyframe(kf.first, kf.second);
 #endif
 
     /// [4] update visual local map（tracking map points for the current image frame）

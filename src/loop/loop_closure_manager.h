@@ -31,8 +31,10 @@ namespace cocolic
 
     bool Enabled() const { return config_.enable; }
 
-    // Call once per new keyframe time, in creation order.
-    void OnKeyframe(int64_t kf_time_ns);
+    // Call once per new keyframe, in creation order. T_LtoG_odom must be the
+    // odometry LiDAR pose captured at keyframe-creation time (see
+    // LidarHandler::TakeNewKeyframes); it is not re-queried from the spline.
+    void OnKeyframe(int64_t kf_time_ns, const SE3d &T_LtoG_odom);
 
     // After the bag: solve the pose graph (if any loops) and return per-keyframe
     // corrections for the trajectory deformer; empty if nothing to correct.

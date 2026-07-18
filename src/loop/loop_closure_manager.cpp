@@ -44,15 +44,18 @@ namespace cocolic
 
   LoopClosureManager::~LoopClosureManager() = default;
 
-  void LoopClosureManager::OnKeyframe(int64_t kf_time_ns)
+  void LoopClosureManager::OnKeyframe(int64_t kf_time_ns, const SE3d &T_LtoG_odom)
   {
     if (!config_.enable) return;
 
-    // 1. snapshot
+    // 1. snapshot. The pose is captured by the caller at keyframe-creation time
+    // (LidarHandler), NOT re-queried here: the spline's leading knots get
+    // marginalized after creation, so a re-query at kf_time_ns can evaluate out
+    // of range and crash.
     KeyframeSnapshot kf;
     kf.index = (int)snapshots_.size();
     kf.time_ns = kf_time_ns;
-    kf.T_LtoG_odom = trajectory_->GetLidarPoseNURBS(kf_time_ns);
+    kf.T_LtoG_odom = T_LtoG_odom;
     const LiDARFeature *lf = lidar_handler_->GetKeyframeScanDs(kf_time_ns);
     kf.scan_ds = (lf && lf->full_cloud && !lf->full_cloud->empty())
                      ? lf->full_cloud : (lf ? lf->surface_features : nullptr);

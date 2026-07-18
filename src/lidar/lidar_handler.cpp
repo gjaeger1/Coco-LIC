@@ -249,18 +249,20 @@ namespace cocolic
       DownsampleLiDARFeature(key_scan, key_scan_ds);
       local_feature_container_[key_scan.timestamp] = key_scan;
       local_feature_container_all_ds_[key_scan.timestamp] = key_scan_ds;
-      // 
+      //
       latest_feature_time_ = key_scan.timestamp;
-#ifdef ENABLE_LOOP_CLOSURE
-      new_keyframe_times_.push_back(key_scan.timestamp);
-#endif
 #endif
       cache_feature_container_.erase(iter++);
 
       PosPoint key_pose;
       key_pose.timestamp = key_scan.timestamp;
-      Eigen::Vector3d p =
-          trajectory_->GetLidarPoseNURBS(key_scan.timestamp).translation();
+      // Query the spline once, while key_scan.timestamp is still inside the
+      // solved window (leading knots are marginalized right after this).
+      SE3d T_LtoG = trajectory_->GetLidarPoseNURBS(key_scan.timestamp);
+#ifdef ENABLE_LOOP_CLOSURE
+      new_keyframes_.emplace_back(key_scan.timestamp, T_LtoG);
+#endif
+      Eigen::Vector3d p = T_LtoG.translation();
       key_pose.x = p[0];
       key_pose.y = p[1];
       key_pose.z = p[2];

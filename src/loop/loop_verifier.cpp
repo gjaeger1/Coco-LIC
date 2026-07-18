@@ -124,10 +124,11 @@ namespace cocolic
 
     Sophus::SE3d T_q_corrected = T_icp * snapshots[q].T_LtoG_odom; // world frame
 
-    // The match pose is re-read from the trajectory (not from the snapshot) so that
-    // in active mode (later WP11) constraints are expressed against already-corrected
-    // poses; in shadow mode both are identical.
-    Sophus::SE3d T_m = trajectory->GetLidarPoseNURBS(snapshots[m].time_ns);
+    // Use the match keyframe's captured odometry pose. Re-querying the spline at
+    // snapshots[m].time_ns is unsafe: its leading knots may have been
+    // marginalized, so the query can evaluate out of range and crash. In shadow
+    // mode the captured pose is exactly what a re-query would have returned.
+    Sophus::SE3d T_m = snapshots[m].T_LtoG_odom;
     
     constraint.query_index = q;
     constraint.match_index = m;

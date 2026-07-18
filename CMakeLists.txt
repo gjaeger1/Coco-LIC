@@ -74,6 +74,14 @@ if(ENABLE_LOOP_CLOSURE)
   )
   target_include_directories(loop_lib PRIVATE ${SCANCONTEXT_SRC_DIR})
   target_link_libraries(loop_lib ${thirdparty_libraries} gtsam)
+  # CRITICAL: the other Coco-LIC targets inherit -march=native (AVX2) from PCL's
+  # exported flags, which sets Eigen's max alignment to 32 bytes. loop_lib is
+  # defined before thirdparty_libraries is populated, so it would otherwise be
+  # built with only -msse4.2 (16-byte Eigen). Mixing 16- and 32-byte Eigen ABIs
+  # in one process makes Eigen objects allocated in one target and freed in
+  # another mismatch handmade_aligned_malloc vs plain free -> heap corruption
+  # ("double free"). Force the same alignment here so the ABI matches.
+  target_compile_options(loop_lib PRIVATE -march=native)
 endif()
 
 # find_package(yaml-cpp REQUIRED)

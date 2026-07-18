@@ -138,13 +138,17 @@ namespace cocolic
 
     void UpdateCloudKeyPos(const std::pair<int, int> &cur_wrt_history);
 
-    // Timestamps of keyframes created since the last call, in creation order;
-    // clears the internal list. Index alignment: the i-th keyframe ever
-    // returned across all calls corresponds to cloud_key_pos_->points[i].
-    std::vector<int64_t> TakeNewKeyframeTimes()
+    // Keyframes created since the last call, in creation order, as
+    // (timestamp, T_LtoG_odom). The pose is captured at creation time -- when
+    // the scan lies inside the currently solved spline window -- because the
+    // spline's leading knots are marginalized shortly after, which would make a
+    // later re-query at the same timestamp evaluate out of range and crash.
+    // Clears the internal list. Index alignment: the i-th keyframe ever returned
+    // across all calls corresponds to cloud_key_pos_->points[i].
+    std::vector<std::pair<int64_t, SE3d>> TakeNewKeyframes()
     {
-      std::vector<int64_t> out;
-      out.swap(new_keyframe_times_);
+      std::vector<std::pair<int64_t, SE3d>> out;
+      out.swap(new_keyframes_);
       return out;
     }
 
@@ -243,8 +247,8 @@ namespace cocolic
     // for loop closure
     PosCloud::Ptr cloud_key_pos_xy_;
     bool key_frame_updated_;
-    // Keyframe times not yet consumed by the loop-closure module.
-    std::vector<int64_t> new_keyframe_times_;
+    // Keyframes (time, T_LtoG_odom) not yet consumed by the loop-closure module.
+    std::vector<std::pair<int64_t, SE3d>> new_keyframes_;
 
     /// 
     double keyframe_angle_degree_;
