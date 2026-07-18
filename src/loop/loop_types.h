@@ -8,8 +8,6 @@
 #include <utils/mypcl_cloud_type.h>   // PosCloud
 #include <utils/parameter_struct.h>   // SE3d (Sophus)
 
-#include "trajectory_deformer.h"
-
 namespace cocolic
 {
 

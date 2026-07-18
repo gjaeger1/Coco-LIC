@@ -29,6 +29,11 @@ namespace cocolic
     double odom_translation_sigma_m = 0.05;
     double rp_information_scale = 100.0;   // roll/pitch inflation (gravity consistency)
 
+    // continuous-time loop back-end (Ceres global solve on spline control points)
+    double backbone_dt_s = 0.4;        // relative-pose backbone edge spacing [s]
+    double loop_robust_cauchy = 1.0;   // Cauchy loss scale for loop edges
+    int loop_max_iterations = 30;      // LM iterations for the global solve
+
     std::string log_dir;              // empty -> "<cache_path>/loop_log"
     int inject_false_loops = 0;       // research tool, see eval tooling
 
@@ -61,6 +66,9 @@ namespace cocolic
         c.odom_rotation_sigma_deg = p["odom_rotation_sigma_deg"] ? p["odom_rotation_sigma_deg"].as<double>() : c.odom_rotation_sigma_deg;
         c.odom_translation_sigma_m = p["odom_translation_sigma_m"] ? p["odom_translation_sigma_m"].as<double>() : c.odom_translation_sigma_m;
         c.rp_information_scale = p["rp_information_scale"] ? p["rp_information_scale"].as<double>() : c.rp_information_scale;
+        c.backbone_dt_s = p["backbone_dt_s"] ? p["backbone_dt_s"].as<double>() : c.backbone_dt_s;
+        c.loop_robust_cauchy = p["loop_robust_cauchy"] ? p["loop_robust_cauchy"].as<double>() : c.loop_robust_cauchy;
+        c.loop_max_iterations = p["loop_max_iterations"] ? p["loop_max_iterations"].as<int>() : c.loop_max_iterations;
       }
       c.log_dir = s("log_dir", c.log_dir);
       c.inject_false_loops = i("inject_false_loops", c.inject_false_loops);

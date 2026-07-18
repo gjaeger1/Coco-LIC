@@ -1,7 +1,5 @@
 #include "loop_closure_manager.h"
 #include "scan_context_detector.h"
-#include "pose_graph.h"
-#include "trajectory_deformer.h"
 
 #include <boost/filesystem.hpp>
 #include <iostream>
@@ -33,7 +31,6 @@ namespace cocolic
     }
 
     verifier_.reset(new LoopVerifier(config_, lidar_handler_, trajectory_));
-    pose_graph_.reset(new PoseGraph(config_));
 
     log_.open(log_dir_ + "/loop_candidates.jsonl");
     if (!log_.is_open())
@@ -64,11 +61,10 @@ namespace cocolic
       std::cout << "[LoopClosureManager] Warning: Keyframe scan_ds is empty at time " << kf_time_ns << std::endl;
     }
     snapshots_.push_back(kf);
-    pose_graph_->AddKeyframe(kf);
 
-    // 2. detect (respect stride), 3. verify, 4. add to graph, 5. always log
-    // With stride > 1, skipped keyframes are not registered in the detector database but
-    // ARE in the pose graph.
+    // 2. detect (respect stride), 3. verify, 4. collect, 5. always log
+    // With stride > 1, skipped keyframes are not registered in the detector
+    // database but ARE available as backbone/loop endpoints in the back-end.
     if (kf.index % config_.detection_stride != 0) return;
     for (const LoopCandidate &c : detector_->AddAndQuery(kf))
     {
@@ -76,7 +72,7 @@ namespace cocolic
       VerificationReport report;
       if (verifier_->Verify(c, snapshots_, constraint, report))
       {
-        pose_graph_->AddLoop(constraint);
+        accepted_loops_.push_back(constraint);
       }
       LogCandidate(c, report);
     }
@@ -105,12 +101,12 @@ namespace cocolic
          << std::endl;
   }
 
-  std::vector<KeyframeCorrection> LoopClosureManager::Finalize()
+  size_t LoopClosureManager::Finalize()
   {
-    if (finalized_ || !config_.enable) return {};
+    if (finalized_ || !config_.enable) return 0;
     finalized_ = true;
 
-    if (snapshots_.empty()) return {};
+    if (snapshots_.empty()) return 0;
 
     // Deterministic adversary for robustness research: inject N wrong loop
     // constraints between far-apart keyframes with a random relative pose.
@@ -145,7 +141,7 @@ namespace cocolic
                                                  dist_z(rng)));
           c.information = Eigen::Matrix<double, 6, 6>::Identity() * 10.0;  // confidently wrong
           c.injected = true;
-          pose_graph_->AddLoop(c);
+          accepted_loops_.push_back(c);
 
           LoopCandidate cand;
           cand.query_index = q;
@@ -164,96 +160,37 @@ namespace cocolic
       }
     }
 
-    if (NumAcceptedLoops() == 0)
-    {
-      std::cout << "🔁 LoopClosure: finalized, but no loops found." << std::endl;
-      
-      std::ofstream odom_file(log_dir_ + "/poses_pgo_tum.txt");
-      if (odom_file.is_open())
-      {
-        for (const auto &kf : snapshots_)
-        {
-          Eigen::Quaterniond q = kf.T_LtoG_odom.unit_quaternion();
-          Eigen::Vector3d t = kf.T_LtoG_odom.translation();
-          odom_file << std::fixed << std::setprecision(9)
-                    << (double)kf.time_ns * 1e-9 << " "
-                    << t.x() << " " << t.y() << " " << t.z() << " "
-                    << q.x() << " " << q.y() << " " << q.z() << " " << q.w() << "\n";
-        }
-        odom_file.close();
-      }
-      return {};
-    }
-
-    auto corrected = pose_graph_->Optimize();
-
-    std::ofstream pgo_file(log_dir_ + "/poses_pgo_tum.txt");
-    if (pgo_file.is_open())
-    {
-      for (size_t i = 0; i < snapshots_.size(); ++i)
-      {
-        Eigen::Quaterniond q = corrected[i].unit_quaternion();
-        Eigen::Vector3d t = corrected[i].translation();
-        pgo_file << std::fixed << std::setprecision(9)
-                 << (double)snapshots_[i].time_ns * 1e-9 << " "
-                 << t.x() << " " << t.y() << " " << t.z() << " "
-                 << q.x() << " " << q.y() << " " << q.z() << " " << q.w() << "\n";
-      }
-      pgo_file.close();
-    }
-
-    std::cout << "🔁 LoopClosure: " << snapshots_.size() << " keyframes, "
-              << NumAcceptedLoops() << " accepted loops, corrected TUM -> "
-              << log_dir_ << "/poses_pgo_tum.txt" << std::endl;
-
-    std::vector<KeyframeCorrection> corrections;
-    corrections.reserve(snapshots_.size());
-    for (size_t i = 0; i < snapshots_.size(); ++i)
-    {
-      KeyframeCorrection c;
-      c.time_ns = snapshots_[i].time_ns;
-      c.delta = corrected[i] * snapshots_[i].T_LtoG_odom.inverse();
-      corrections.push_back(c);
-    }
-
     if (log_.is_open())
-    {
       log_.close();
-    }
 
-    return corrections;
+    if (accepted_loops_.empty())
+      std::cout << "🔁 LoopClosure: finalized, but no loops found." << std::endl;
+    else
+      std::cout << "🔁 LoopClosure: " << snapshots_.size() << " keyframes, "
+                << accepted_loops_.size() << " accepted loops." << std::endl;
+    return accepted_loops_.size();
   }
 
-  size_t LoopClosureManager::NumAcceptedLoops() const
+  void LoopClosureManager::WritePgoTum()
   {
-    return pose_graph_ ? pose_graph_->NumLoops() : 0;
-  }
-
-  size_t LoopClosureManager::ApplyCorrectionsToTrajectory(
-      const std::vector<KeyframeCorrection> &corrections)
-  {
-    if (corrections.empty()) return 0;
-    const size_t n = std::min(trajectory_->numKnots(), trajectory_->knts.size());
-
-    // Copy out, deform with the pure function, write back. The copy keeps
-    // trajectory_deformer free of spline dependencies (host-testable).
-    std::vector<int64_t> times(trajectory_->knts.begin(), trajectory_->knts.begin() + n);
-    std::vector<SO3d> Rs(n);
-    std::vector<Eigen::Vector3d> ps(n);
-    for (size_t i = 0; i < n; ++i)
+    if (!config_.enable || snapshots_.empty()) return;
+    // Valid spline eval range at finalize (all control points retained).
+    const int64_t t_lo = trajectory_->knts.size() > (size_t)SplineOrder
+                             ? trajectory_->knts[SplineOrder - 1] : 0;
+    const int64_t t_hi = trajectory_->maxTimeNsNURBS();
+    std::ofstream pgo(log_dir_ + "/poses_pgo_tum.txt");
+    if (!pgo.is_open()) return;
+    for (const auto &kf : snapshots_)
     {
-      Rs[i] = trajectory_->getKnotSO3(i);
-      ps[i] = trajectory_->getKnotPos(i);
+      if (kf.time_ns < t_lo || kf.time_ns >= t_hi) continue;
+      SE3d T = trajectory_->GetLidarPoseNURBS(kf.time_ns);  // deformed spline
+      Eigen::Quaterniond q = T.unit_quaternion();
+      Eigen::Vector3d t = T.translation();
+      pgo << std::fixed << std::setprecision(9) << (double)kf.time_ns * 1e-9 << " "
+          << t.x() << " " << t.y() << " " << t.z() << " "
+          << q.x() << " " << q.y() << " " << q.z() << " " << q.w() << "\n";
     }
-
-    DeformKnots(times, Rs, ps, corrections);
-
-    for (size_t i = 0; i < n; ++i)
-    {
-      trajectory_->setKnotSO3(Rs[i], i);
-      trajectory_->setKnotPos(ps[i], i);
-    }
-    return n;
+    pgo.close();
   }
 
   void LoopClosureManager::WriteOdomTum()

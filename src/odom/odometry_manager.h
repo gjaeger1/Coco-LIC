@@ -31,6 +31,7 @@
 
 #ifdef ENABLE_LOOP_CLOSURE
 #include <loop/loop_closure_manager.h>
+#include <loop/loop_backend.h>
 #endif
 
 #include <condition_variable>

@@ -33,6 +33,7 @@
 
 #include <odom/factor/analytic_diff/image_feature_factor.h>
 #include <odom/factor/analytic_diff/lidar_feature_factor.h>
+#include <odom/factor/analytic_diff/loop_closure_factor.h>
 #include <odom/factor/analytic_diff/marginalization_factor.h>
 #include <odom/factor/analytic_diff/trajectory_value_factor.h>
 
@@ -280,6 +281,16 @@ namespace cocolic
 
     void AddRelativePoseMeasurementAnalyticDiffNURBS(const PoseData &pose_data, double pos_weight,
                                                      double rot_weight);
+
+    // Two-time relative-pose constraint on the spline (loop-closure back-end).
+    // Constrains T(t_i)^-1 * T(t_j) == T_meas_i_to_j. Requires t_i_ns < t_j_ns
+    // and the two times in DISJOINT spline segments (>= SplineOrder apart);
+    // otherwise the edge is skipped. sqrt_info is the per-DOF sqrt information in
+    // Sophus SE3 tangent order [trans(3); rot(3)]. `loss` may be nullptr.
+    void AddLoopClosureFactorNURBS(int64_t t_i_ns, int64_t t_j_ns,
+                                   const SE3d &T_meas_i_to_j,
+                                   const Eigen::Matrix<double, 6, 1> &sqrt_info,
+                                   ceres::LossFunction *loss);
 
     void Add6DofLocalVelocityAutoDiff(
         const double timestamp, const Eigen::Matrix<double, 6, 1> &local_gyro_vel,

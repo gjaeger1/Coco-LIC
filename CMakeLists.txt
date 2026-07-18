@@ -42,12 +42,10 @@ find_package(Ceres REQUIRED)
 find_package(OpenCV REQUIRED)
 find_package(PCL 1.13.0 REQUIRED)
 
-option(ENABLE_LOOP_CLOSURE "Build the loop-closure module (requires GTSAM)" ON)
+option(ENABLE_LOOP_CLOSURE "Build the loop-closure module" ON)
 if(ENABLE_LOOP_CLOSURE)
-  find_package(GTSAM REQUIRED)
-  if(GTSAM_VERSION VERSION_LESS 4.1)
-    message(WARNING "GTSAM ${GTSAM_VERSION} < 4.1: robust_kernel 'gnc' will be unavailable; cauchy/dcs still work.")
-  endif()
+  # Loop correction is done by the continuous-time Ceres backend (LoopBackend),
+  # which deforms the B-spline control points directly -- no GTSAM pose graph.
   add_definitions(-DENABLE_LOOP_CLOSURE)
 
   # Scan Context (Kim et al.) is CC BY-NC-SA 4.0 and must not be vendored
@@ -67,13 +65,11 @@ if(ENABLE_LOOP_CLOSURE)
   add_library(loop_lib
     src/loop/scan_context_detector.cpp
     src/loop/loop_verifier.cpp
-    src/loop/pose_graph.cpp
-    src/loop/trajectory_deformer.cpp
     src/loop/loop_closure_manager.cpp
     ${SCANCONTEXT_SRC_DIR}/Scancontext.cpp
   )
   target_include_directories(loop_lib PRIVATE ${SCANCONTEXT_SRC_DIR})
-  target_link_libraries(loop_lib ${thirdparty_libraries} gtsam)
+  target_link_libraries(loop_lib ${thirdparty_libraries})
   # CRITICAL: the other Coco-LIC targets inherit -march=native (AVX2) from PCL's
   # exported flags, which sets Eigen's max alignment to 32 bytes. loop_lib is
   # defined before thirdparty_libraries is populated, so it would otherwise be
@@ -165,6 +161,7 @@ add_executable(odometry_node
    src/odom/odometry_manager.cpp
    src/odom/factor/analytic_diff/marginalization_factor.cpp
    src/utils/parameter_struct.cpp
+   src/loop/loop_backend.cpp
 )
 
 target_link_libraries(odometry_node 
@@ -176,5 +173,5 @@ target_link_libraries(odometry_node
 )
 
 if(ENABLE_LOOP_CLOSURE)
-  target_link_libraries(odometry_node loop_lib gtsam)
+  target_link_libraries(odometry_node loop_lib)
 endif()

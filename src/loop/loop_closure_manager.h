@@ -14,11 +14,12 @@
 
 namespace cocolic
 {
-  class PoseGraph;
 
   // Orchestrates loop closure: keyframe intake -> detection -> verification ->
-  // pose graph. Runs synchronously in the odometry loop (deterministic:
-  // same bag -> same loops). Owns the JSONL candidate log.
+  // collect verified constraints. Runs synchronously in the odometry loop
+  // (deterministic: same bag -> same loops). Owns the JSONL candidate log. The
+  // actual correction is done by the continuous-time LoopBackend (driven by
+  // OdometryManager at finalize), which deforms the spline in place.
   class LoopClosureManager
   {
   public:
@@ -36,22 +37,22 @@ namespace cocolic
     // LidarHandler::TakeNewKeyframes); it is not re-queried from the spline.
     void OnKeyframe(int64_t kf_time_ns, const SE3d &T_LtoG_odom);
 
-    // After the bag: solve the pose graph (if any loops) and return per-keyframe
-    // corrections for the trajectory deformer; empty if nothing to correct.
-    // Also writes poses_pgo_tum.txt and flushes the log. Idempotent.
-    std::vector<KeyframeCorrection> Finalize();
-
-    // Applies `corrections` to the spline in place (finalize-time deformation).
-    // Call exactly once, after the bag ends and before any pose is saved or
-    // exported. Returns the number of control points modified.
-    size_t ApplyCorrectionsToTrajectory(
-        const std::vector<KeyframeCorrection> &corrections);
+    // After the bag: run the false-loop injection (research adversary) and flush
+    // the candidate log. Returns the number of accepted loops (incl. injected).
+    // Does NOT touch the spline -- the caller runs LoopBackend with AcceptedLoops().
+    // Idempotent.
+    size_t Finalize();
 
     // Writes the uncorrected odometry keyframe poses to poses_odom_tum.txt.
     void WriteOdomTum();
+    // Writes the corrected keyframe poses (queried from the deformed spline);
+    // call AFTER LoopBackend has run.
+    void WritePgoTum();
 
     const std::vector<KeyframeSnapshot> &Snapshots() const { return snapshots_; }
-    size_t NumAcceptedLoops() const;
+    const std::vector<LoopConstraint> &AcceptedLoops() const { return accepted_loops_; }
+    const LoopClosureConfig &Config() const { return config_; }
+    size_t NumAcceptedLoops() const { return accepted_loops_.size(); }
 
   private:
     void LogCandidate(const LoopCandidate &c, const VerificationReport &r, bool injected = false);
@@ -62,9 +63,9 @@ namespace cocolic
 
     LoopDetector::Ptr detector_;
     std::unique_ptr<LoopVerifier> verifier_;
-    std::unique_ptr<PoseGraph> pose_graph_;
 
     std::vector<KeyframeSnapshot> snapshots_;
+    std::vector<LoopConstraint> accepted_loops_;  // verified + injected loops
     std::string log_dir_;
     std::ofstream log_;         // <log_dir>/loop_candidates.jsonl, opened in ctor
     bool finalized_ = false;

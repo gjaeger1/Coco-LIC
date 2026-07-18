@@ -430,6 +430,45 @@ namespace cocolic
     problem_->AddResidualBlock(cost_function, NULL, vec);
   }
 
+  void TrajectoryEstimator::AddLoopClosureFactorNURBS(
+      int64_t t_i_ns, int64_t t_j_ns, const SE3d &T_meas_i_to_j,
+      const Eigen::Matrix<double, 6, 1> &sqrt_info, ceres::LossFunction *loss)
+  {
+    if (t_i_ns >= t_j_ns)
+      return;  // caller must pass the earlier time first (i-segment < j-segment)
+
+    // Loop/backbone factors span the whole (retained) trajectory, so the knot
+    // lookup must scan from index 0. The default GetIdxT starts at the member
+    // `startIdx`, which the online window has advanced to the trajectory end --
+    // that only finds times inside the last window and skips every earlier edge.
+    std::pair<int, double> su_i(-1, 0.0), su_j(-1, 0.0);
+    trajectory_->GetIdxT(t_i_ns, su_i, /*from_start=*/true);
+    trajectory_->GetIdxT(t_j_ns, su_j, /*from_start=*/true);
+    size_t num_seg = trajectory_->blending_mats.size();
+    if (!IsValidSplineSegment(su_i, num_seg, "loop_i", t_i_ns) ||
+        !IsValidSplineSegment(su_j, num_seg, "loop_j", t_j_ns))
+      return;
+
+    int idx_i = su_i.first - 3;  // first of the 4 knots covering t_i
+    int idx_j = su_j.first - 3;
+    // The factor assumes 16 distinct knots (two disjoint segments). Skip edges
+    // whose knot windows overlap.
+    if (idx_j - idx_i < 4)
+      return;
+
+    ceres::CostFunction *cost = analytic_derivative::LoopRelativePoseFunctor::Create(
+        su_i.second, su_j.second,
+        trajectory_->cumu_blending_mats[idx_i], trajectory_->cumu_blending_mats[idx_j],
+        trajectory_->blending_mats[idx_i], trajectory_->blending_mats[idx_j],
+        T_meas_i_to_j, sqrt_info);
+
+    std::vector<double *> vec;
+    AddControlPointsNURBS(idx_i, idx_j, vec);        // 8 SO(3) knots
+    AddControlPointsNURBS(idx_i, idx_j, vec, true);  // 8 R3 knots
+
+    problem_->AddResidualBlock(cost, loss, vec);
+  }
+
   void TrajectoryEstimator::AddCallback(
       const std::vector<std::string> &descriptions,
       const std::vector<size_t> &block_size, std::vector<double *> &param_block)
