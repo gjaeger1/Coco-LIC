@@ -62,14 +62,21 @@ if(ENABLE_LOOP_CLOSURE)
   endif()
   set(SCANCONTEXT_SRC_DIR ${scancontext_SOURCE_DIR}/cpp/module/Scancontext)
 
+  # DBoW3 (ORB bag-of-words) for camera VPR. Installed into the container image
+  # (headers in /usr/local/include/DBoW3, lib in /usr/local/lib). A pre-trained
+  # ORB vocabulary is shipped at /home/ubuntu/Software/ORBvoc.txt (see Dockerfile).
+  find_library(DBOW3_LIB DBoW3 REQUIRED)
+
   add_library(loop_lib
     src/loop/scan_context_detector.cpp
+    src/loop/spatial_detector.cpp
+    src/loop/visual_bow_detector.cpp
     src/loop/loop_verifier.cpp
     src/loop/loop_closure_manager.cpp
     ${SCANCONTEXT_SRC_DIR}/Scancontext.cpp
   )
   target_include_directories(loop_lib PRIVATE ${SCANCONTEXT_SRC_DIR})
-  target_link_libraries(loop_lib ${thirdparty_libraries})
+  target_link_libraries(loop_lib ${thirdparty_libraries} ${DBOW3_LIB})
   # CRITICAL: the other Coco-LIC targets inherit -march=native (AVX2) from PCL's
   # exported flags, which sets Eigen's max alignment to 32 bytes. loop_lib is
   # defined before thirdparty_libraries is populated, so it would otherwise be
@@ -114,6 +121,7 @@ include_directories(
   # ${Sophus_INCLUDE_DIRS}
   ${EIGEN3_INCLUDE_DIR}
   ${PCL_INCLUDE_DIRS}
+  ${OpenCV_INCLUDE_DIRS}
   src/camera
   src/camera/loam/include
   src/camera/tools/

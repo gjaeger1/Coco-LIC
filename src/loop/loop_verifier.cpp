@@ -2,6 +2,7 @@
 
 #include <pcl/registration/gicp.h>
 #include <pcl/kdtree/kdtree_flann.h>
+#include <pcl/common/centroid.h>
 #include <algorithm>
 
 namespace cocolic
@@ -62,10 +63,21 @@ namespace cocolic
     gicp.setTransformationEpsilon(1e-6);
 
     pcl::PointCloud<pcl::PointXYZ> aligned_source;
-    // align with identity initial guess. candidate.yaw_init is NOT used for the
-    // initial guess in this version (logged upstream for research; using it is a
-    // known improvement hook).
-    gicp.align(aligned_source);
+    // Initial guess: rotate the (world-frame) source by the detector's yaw hint
+    // and translate its centroid onto the target centroid. Under large odometry
+    // drift the source and target submaps are far apart and identity-init GICP
+    // falls outside its convergence basin; this seed pulls them together. When
+    // odometry is good the centroids already coincide and yaw_init ~ 0, so the
+    // guess degenerates to identity (no change vs the old behaviour).
+    Eigen::Vector4f src_centroid, tgt_centroid;
+    pcl::compute3DCentroid(*source_world, src_centroid);
+    pcl::compute3DCentroid(*target_world, tgt_centroid);
+    Eigen::Matrix4f guess = Eigen::Matrix4f::Identity();
+    Eigen::Matrix3f Rz(Eigen::AngleAxisf((float)candidate.yaw_init,
+                                         Eigen::Vector3f::UnitZ()));
+    guess.block<3, 3>(0, 0) = Rz;
+    guess.block<3, 1>(0, 3) = tgt_centroid.head<3>() - Rz * src_centroid.head<3>();
+    gicp.align(aligned_source, guess);
 
     if (!gicp.hasConverged())
     {
@@ -134,10 +146,16 @@ namespace cocolic
     constraint.match_index = m;
     constraint.T_match_query = T_m.inverse() * T_q_corrected;
 
-    // Information (documented heuristic, LIO-SAM style): let s = max(icp_fitness, 1e-3);
-    // constraint.information = (1.0 / s) * Identity6.
+    // Information (heuristic, fusion-ready): confidence grows with overlap and
+    // shrinks with the ICP residual. First-class 6x6 diagonal in [trans; rot]
+    // order (matching LoopRelativePoseFunctor / InformationProvider), so Step-2
+    // can replace it with a covariance-derived / multi-sensor-fused matrix
+    // without changing the factor. Isotropic per-block for now.
     double s = std::max(report.icp_fitness, 1e-3);
-    constraint.information = (1.0 / s) * Eigen::Matrix<double, 6, 6>::Identity();
+    double conf = std::max(report.overlap_ratio, 1e-3) / s;
+    Eigen::Matrix<double, 6, 1> diag;
+    diag << conf, conf, conf, conf, conf, conf;  // [tx,ty,tz, rx,ry,rz]
+    constraint.information = diag.asDiagonal();
     constraint.injected = false;
 
     report.accepted = true;

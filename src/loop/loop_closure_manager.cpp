@@ -1,11 +1,15 @@
 #include "loop_closure_manager.h"
 #include "scan_context_detector.h"
+#include "spatial_detector.h"
+#include "visual_bow_detector.h"
 
 #include <boost/filesystem.hpp>
 #include <iostream>
 #include <iomanip>
+#include <map>
 #include <stdexcept>
 #include <random>
+#include <utility>
 
 namespace cocolic
 {
@@ -21,13 +25,21 @@ namespace cocolic
     log_dir_ = config_.log_dir.empty() ? default_log_dir + "/loop_log" : config_.log_dir;
     boost::filesystem::create_directories(log_dir_);
 
-    if (config_.detector == "scan_context")
+    // Build the detector list. `detectors:` (multi) takes precedence; otherwise
+    // fall back to the legacy single `detector:` for backward compatibility.
+    std::vector<std::string> names =
+        config_.detectors.empty() ? std::vector<std::string>{config_.detector}
+                                   : config_.detectors;
+    for (const std::string &name : names)
     {
-      detector_.reset(new ScanContextDetector(config_));
-    }
-    else
-    {
-      throw std::runtime_error("unknown detector: " + config_.detector);
+      if (name == "scan_context")
+        detectors_.emplace_back(new ScanContextDetector(config_));
+      else if (name == "spatial")
+        detectors_.emplace_back(new SpatialDetector(config_));
+      else if (name == "visual_bow")
+        detectors_.emplace_back(new VisualBoWDetector(config_));
+      else
+        throw std::runtime_error("unknown detector: " + name);
     }
 
     verifier_.reset(new LoopVerifier(config_, lidar_handler_, trajectory_));
@@ -41,7 +53,8 @@ namespace cocolic
 
   LoopClosureManager::~LoopClosureManager() = default;
 
-  void LoopClosureManager::OnKeyframe(int64_t kf_time_ns, const SE3d &T_LtoG_odom)
+  void LoopClosureManager::OnKeyframe(int64_t kf_time_ns, const SE3d &T_LtoG_odom,
+                                      const cv::Mat &image)
   {
     if (!config_.enable) return;
 
@@ -60,14 +73,52 @@ namespace cocolic
     {
       std::cout << "[LoopClosureManager] Warning: Keyframe scan_ds is empty at time " << kf_time_ns << std::endl;
     }
+    // Camera image for VPR (LICO mode). Clone: the caller reuses msg.image.
+    if (!image.empty())
+    {
+      kf.image = image.clone();
+      kf.has_image = true;
+    }
     snapshots_.push_back(kf);
 
     // 2. detect (respect stride), 3. verify, 4. collect, 5. always log
     // With stride > 1, skipped keyframes are not registered in the detector
     // database but ARE available as backbone/loop endpoints in the back-end.
-    if (kf.index % config_.detection_stride != 0) return;
-    for (const LoopCandidate &c : detector_->AddAndQuery(kf))
+    if (kf.index % config_.detection_stride != 0)
     {
+      snapshots_.back().image.release();  // not queried: free the image
+      return;
+    }
+
+    // Run every detector on this keyframe and union their candidates. Distinct
+    // detectors may propose the same (query, match) pair; de-duplicate on the
+    // pair, preferring a candidate that carries a yaw init (spatial provides one,
+    // visual BoW does not) so the verifier gets the best GICP seed.
+    std::map<std::pair<int, int>, LoopCandidate> unique_cands;
+    for (const auto &det : detectors_)
+    {
+      for (const LoopCandidate &c : det->AddAndQuery(kf))
+      {
+        auto key = std::make_pair(c.query_index, c.match_index);
+        auto it = unique_cands.find(key);
+        if (it == unique_cands.end())
+        {
+          unique_cands.emplace(key, c);
+        }
+        else if (it->second.yaw_init == 0.0 && c.yaw_init != 0.0)
+        {
+          it->second.yaw_init = c.yaw_init;
+        }
+      }
+    }
+
+    // The image has now been consumed by the visual detector; release it so we
+    // do not retain a full cv::Mat per keyframe.
+    snapshots_.back().image.release();
+
+    for (const auto &kv : unique_cands)
+    {
+      const LoopCandidate &c = kv.second;
       LoopConstraint constraint;
       VerificationReport report;
       if (verifier_->Verify(c, snapshots_, constraint, report))

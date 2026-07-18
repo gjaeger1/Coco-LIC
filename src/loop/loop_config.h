@@ -1,6 +1,7 @@
 #pragma once
 
 #include <string>
+#include <vector>
 #include <yaml-cpp/yaml.h>
 
 namespace cocolic
@@ -13,9 +14,19 @@ namespace cocolic
   {
     bool enable = false;
     bool shadow_mode = true;          // true: never touch the live odometry
-    std::string detector = "scan_context";  // scan_context | std
+    std::string detector = "scan_context";  // legacy single detector (used if `detectors` empty)
+    std::vector<std::string> detectors;     // multi-detector: e.g. [visual_bow, spatial]; empty -> {detector}
     int min_index_gap = 50;           // reject matches younger than this many keyframes
     int detection_stride = 1;         // run the detector every k-th keyframe
+
+    // visual place recognition (VisualBoWDetector, DBoW3 + ORB)
+    std::string bow_vocab_path = "/home/ubuntu/Software/ORBvoc.txt";
+    int bow_num_features = 1000;      // ORB features per keyframe image
+    double bow_score_min = 0.015;     // min DBoW3 similarity score to propose a candidate
+    int bow_max_candidates = 3;       // top-N DB matches considered per query
+
+    // spatial proposer (odometry-pose proximity; sensor-agnostic)
+    double spatial_search_radius_m = 10.0;  // propose past keyframes within this radius
 
     // verifier
     double icp_fitness_max = 0.3;     // PCL fitness (mean sq. dist), accept below
@@ -49,8 +60,23 @@ namespace cocolic
       c.enable = b("enable", c.enable);
       c.shadow_mode = b("shadow_mode", c.shadow_mode);
       c.detector = s("detector", c.detector);
+      if (n["detectors"] && n["detectors"].IsSequence())
+        for (const auto &d : n["detectors"]) c.detectors.push_back(d.as<std::string>());
       c.min_index_gap = i("min_index_gap", c.min_index_gap);
       c.detection_stride = i("detection_stride", c.detection_stride);
+      if (n["visual_bow"])
+      {
+        const YAML::Node vb = n["visual_bow"];
+        c.bow_vocab_path = vb["vocab_path"] ? vb["vocab_path"].as<std::string>() : c.bow_vocab_path;
+        c.bow_num_features = vb["num_features"] ? vb["num_features"].as<int>() : c.bow_num_features;
+        c.bow_score_min = vb["score_min"] ? vb["score_min"].as<double>() : c.bow_score_min;
+        c.bow_max_candidates = vb["max_candidates"] ? vb["max_candidates"].as<int>() : c.bow_max_candidates;
+      }
+      if (n["spatial"])
+      {
+        const YAML::Node sp = n["spatial"];
+        c.spatial_search_radius_m = sp["search_radius_m"] ? sp["search_radius_m"].as<double>() : c.spatial_search_radius_m;
+      }
       if (n["verifier"])
       {
         const YAML::Node v = n["verifier"];

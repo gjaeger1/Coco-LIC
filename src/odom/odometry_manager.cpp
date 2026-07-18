@@ -319,7 +319,7 @@ namespace cocolic
     // keyframe times queued and snapshot them on the next healthy frame.
     if (loop_closure_manager_ && !trajectory_manager_->solve_failed_)
       for (const auto &kf : lidar_handler_->TakeNewKeyframes())
-        loop_closure_manager_->OnKeyframe(kf.first, kf.second);
+        loop_closure_manager_->OnKeyframe(kf.first, kf.second, msg.image);  // msg.image: current LICO-window image (empty in LIO)
 #endif
 
     /// [4] update visual local map（tracking map points for the current image frame）

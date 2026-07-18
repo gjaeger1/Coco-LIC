@@ -35,7 +35,11 @@ namespace cocolic
     // Call once per new keyframe, in creation order. T_LtoG_odom must be the
     // odometry LiDAR pose captured at keyframe-creation time (see
     // LidarHandler::TakeNewKeyframes); it is not re-queried from the spline.
-    void OnKeyframe(int64_t kf_time_ns, const SE3d &T_LtoG_odom);
+    // `image` is the current LICO-window image at keyframe-creation time (may be
+    // empty in LIO mode); the visual detector extracts its descriptor here and
+    // the full image is then released.
+    void OnKeyframe(int64_t kf_time_ns, const SE3d &T_LtoG_odom,
+                    const cv::Mat &image = cv::Mat());
 
     // After the bag: run the false-loop injection (research adversary) and flush
     // the candidate log. Returns the number of accepted loops (incl. injected).
@@ -61,7 +65,7 @@ namespace cocolic
     std::shared_ptr<Trajectory> trajectory_;
     std::shared_ptr<LidarHandler> lidar_handler_;
 
-    LoopDetector::Ptr detector_;
+    std::vector<LoopDetector::Ptr> detectors_;  // run in order; candidates unioned
     std::unique_ptr<LoopVerifier> verifier_;
 
     std::vector<KeyframeSnapshot> snapshots_;

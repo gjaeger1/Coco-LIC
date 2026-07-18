@@ -5,6 +5,7 @@
 #include <vector>
 
 #include <Eigen/Core>
+#include <opencv2/core/core.hpp>      // cv::Mat, cv::KeyPoint
 #include <utils/mypcl_cloud_type.h>   // PosCloud
 #include <utils/parameter_struct.h>   // SE3d (Sophus)
 
@@ -18,6 +19,16 @@ namespace cocolic
     int64_t time_ns = -1;    // keyframe scan time (trajectory time base)
     SE3d T_LtoG_odom;        // LiDAR->world pose from the spline when the keyframe was created
     PosCloud::Ptr scan_ds;   // undistorted, downsampled scan in the LiDAR frame at time_ns
+
+    // --- camera VPR (LICO mode; empty in LIO mode or when no image in window) ---
+    // `image` is transient: set at keyframe creation, consumed by the visual
+    // detector during OnKeyframe (ORB -> keypoints/descriptors), then released
+    // so we do not hold a full cv::Mat per keyframe. keypoints/descriptors and
+    // the DBoW vector persist for verification/re-query.
+    cv::Mat image;                           // undistorted keyframe image (transient)
+    std::vector<cv::KeyPoint> keypoints;     // ORB keypoints (filled by VisualBoWDetector)
+    cv::Mat descriptors;                     // ORB descriptors Nx32 (filled by VisualBoWDetector)
+    bool has_image = false;                  // an image was available for this keyframe
   };
 
   // Detector output: a hypothesis, unverified.
