@@ -438,6 +438,7 @@ namespace cocolic
             cloud_neighbor_picked[index] = 1;
             for (int l = 1; l <= 5; l++)
             {
+              if (index + l >= n_scan * horizon_scan) break;  // guard buffer overrun
               int column_diff = std::abs(int(point_column_id[index + l] -
                                              point_column_id[index + l - 1]));
               if (column_diff > 10)
@@ -446,6 +447,7 @@ namespace cocolic
             }
             for (int l = -1; l >= -5; l--)
             {
+              if (index + l < 0) break;  // guard buffer underrun
               int column_diff = std::abs(int(point_column_id[index + l] -
                                              point_column_id[index + l + 1]));
               if (column_diff > 10)
@@ -467,6 +469,7 @@ namespace cocolic
 
             for (int l = 1; l <= 5; l++)
             {
+              if (index + l >= n_scan * horizon_scan) break;  // guard buffer overrun
               int column_diff = std::abs(int(point_column_id[index + l] -
                                              point_column_id[index + l - 1]));
               if (column_diff > 10)
@@ -475,6 +478,7 @@ namespace cocolic
             }
             for (int l = -1; l >= -5; l--)
             {
+              if (index + l < 0) break;  // guard buffer underrun
               int column_diff = std::abs(int(point_column_id[index + l] -
                                              point_column_id[index + l + 1]));
               if (column_diff > 10)

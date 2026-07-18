@@ -71,7 +71,7 @@ void ResidualBlockInfo::Evaluate() {
 MarginalizationInfo::~MarginalizationInfo() {
   for (auto it = parameter_block_data.begin(); it != parameter_block_data.end();
        ++it) {
-    delete it->second;
+    delete[] it->second;  // allocated with new double[size] (see preMarginalize)
   }
 
   for (int i = 0; i < (int)factors.size(); i++) {
