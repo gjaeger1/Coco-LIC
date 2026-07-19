@@ -26,6 +26,7 @@ namespace cocolic
     TrajectoryEstimatorOptions options;
     options.lock_traj = false;
     options.lock_tran = false;
+    options.use_true_lie_manifold = true;  // all loop-problem factors are auto-diff
     TrajectoryEstimator estimator(trajectory_, options, "loop");
     // Gauge: fix the first SplineOrder control points (anchor the start pose).
     estimator.SetFixedIndex(SplineOrder - 1);

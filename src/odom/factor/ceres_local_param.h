@@ -93,21 +93,26 @@ class LieLocalParameterization : public ceres::LocalParameterization {
 
   ///@brief Jacobian of plus operation for Ceres
   ///
-  /// Dx T * exp(x)  with  x=0
-  ///  w -z  y
-  ///  z  w -x
-  /// -y  x  w
-  /// -x -y -z
-  /// 4*3
+  /// TRUE lift: d(T * exp(x))/dx at x=0, as the row-major
+  /// GlobalSize x LocalSize (4x3) matrix Ceres expects. The vendored Sophus
+  /// Dx_this_mul_exp_x_at_0() returns the 3x4 transpose (rows = tangent),
+  /// hence the .transpose().
+  ///
+  /// Use THIS parameterization for parameter blocks touched by AUTO-DIFF cost
+  /// functions: auto-diff produces d(residual)/d(raw quaternion), which must be
+  /// composed with the true lift. LieAnalyticLocalParameterization below
+  /// instead returns the identity-lift [I3;0] and is ONLY correct for analytic
+  /// factors that write tangent-space Jacobians into the first 3 columns
+  /// directly. Mixing the two on one block silently corrupts rotation
+  /// gradients (observed: the loop back-end stalled on rotation-dominated
+  /// corrections).
   virtual bool ComputeJacobian(double const* T_raw,
                                double* jacobian_raw) const {
     Eigen::Map<Groupd const> T(T_raw);
-    // TODO
-     Eigen::Map<Eigen::Matrix<double, Groupd::num_parameters, Groupd::DoF,
-                              Eigen::RowMajor>>
-    // Eigen::Map<Eigen::Matrix<double, Groupd::DoF, Groupd::num_parameters>>
+    Eigen::Map<Eigen::Matrix<double, Groupd::num_parameters, Groupd::DoF,
+                             Eigen::RowMajor>>
         jacobian(jacobian_raw);
-    jacobian = T.Dx_this_mul_exp_x_at_0();
+    jacobian = T.Dx_this_mul_exp_x_at_0().transpose();
     return true;
   }
 

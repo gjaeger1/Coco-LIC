@@ -46,6 +46,14 @@ namespace cocolic
 
     bool use_auto_diff = false;
 
+    // Use the TRUE Lie lift (LieLocalParameterization) for SO3 knot blocks
+    // instead of the identity-lift trick (LieAnalyticLocalParameterization).
+    // REQUIRED when the problem's cost functions are auto-diff (loop back-end):
+    // auto-diff emits raw-quaternion Jacobians that must be composed with the
+    // real d(q*exp(x))/dx. The online sliding-window problem uses hand-written
+    // analytic factors whose Jacobians are tangent-space already -> keep false.
+    bool use_true_lie_manifold = false;
+
     // If estimating the time offset, the max/min value of time offset
     int64_t t_offset_padding_ns = 1e7; // 0.02;
 

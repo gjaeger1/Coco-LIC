@@ -73,8 +73,13 @@ namespace cocolic
 
 
     auto_diff_local_parameterization_ = nullptr;
-    analytic_local_parameterization_ =
-        new LieAnalyticLocalParameterization<SO3d>();
+    // True lift for auto-diff problems (loop back-end); identity-lift trick for
+    // the analytic online factors. See trajectory_estimator_options.h.
+    if (options.use_true_lie_manifold)
+      analytic_local_parameterization_ = new LieLocalParameterization<SO3d>();
+    else
+      analytic_local_parameterization_ =
+          new LieAnalyticLocalParameterization<SO3d>();
 
     // For gravity
     homo_vec_local_parameterization_ =
