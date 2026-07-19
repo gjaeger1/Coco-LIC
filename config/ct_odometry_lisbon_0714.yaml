@@ -55,6 +55,7 @@ loop_closure:
     icp_fitness_max: 0.3
     overlap_ratio_min: 0.6
     submap_half_size: 12
+    max_correction_m: 10.0  # aliasing guard: reject ICP that moves the query further than plausible drift
   pgo:
     robust_kernel: cauchy
     odom_rotation_sigma_deg: 0.5
@@ -66,8 +67,12 @@ loop_closure:
     # close. 200 keeps their gradient alive; the verifier remains the primary
     # false-loop defense on this dataset.
     loop_robust_cauchy: 200.0
-    loop_max_iterations: 100  # 48 m correction propagating through chained shape priors
-    knot_prior_weight: 1.0   # adjacent-knot local-frame shape prior (null-space damping)
+    loop_max_iterations: 200
+    # sigma ~0.03 m / 0.03 rad per adjacent knot pair: the smooth 48 m / 35 deg
+    # closure only changes each pair by ~mm / ~0.001 rad (free), while
+    # sub-backbone rotational bending (the residual wiggle at weight 1.0) is
+    # strongly punished.
+    knot_prior_weight: 30.0
   log_dir: ""
   inject_false_loops: 0
 lidar_skip: 10  # downsample: randomly select a LiDAR point every [lidar_skip] points

@@ -32,6 +32,7 @@ namespace cocolic
     double icp_fitness_max = 0.3;     // PCL fitness (mean sq. dist), accept below
     double overlap_ratio_min = 0.6;   // source points with a close neighbor in target
     int submap_half_size = 12;        // keyframes on each side for the ICP target
+    double max_correction_m = 10.0;   // reject if ICP moves the query > this (aliasing guard)
     bool pcm_enable = false;          // reserved (pairwise consistency), not read yet
 
     // pose graph
@@ -84,6 +85,7 @@ namespace cocolic
         c.icp_fitness_max = v["icp_fitness_max"] ? v["icp_fitness_max"].as<double>() : c.icp_fitness_max;
         c.overlap_ratio_min = v["overlap_ratio_min"] ? v["overlap_ratio_min"].as<double>() : c.overlap_ratio_min;
         c.submap_half_size = v["submap_half_size"] ? v["submap_half_size"].as<int>() : c.submap_half_size;
+        c.max_correction_m = v["max_correction_m"] ? v["max_correction_m"].as<double>() : c.max_correction_m;
         c.pcm_enable = v["pcm_enable"] ? v["pcm_enable"].as<bool>() : c.pcm_enable;
       }
       if (n["pgo"])

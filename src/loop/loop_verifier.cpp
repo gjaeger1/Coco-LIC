@@ -63,21 +63,33 @@ namespace cocolic
     gicp.setTransformationEpsilon(1e-6);
 
     pcl::PointCloud<pcl::PointXYZ> aligned_source;
-    // Initial guess: rotate the (world-frame) source by the detector's yaw hint
-    // and translate its centroid onto the target centroid. Under large odometry
-    // drift the source and target submaps are far apart and identity-init GICP
-    // falls outside its convergence basin; this seed pulls them together. When
-    // odometry is good the centroids already coincide and yaw_init ~ 0, so the
-    // guess degenerates to identity (no change vs the old behaviour).
-    Eigen::Vector4f src_centroid, tgt_centroid;
-    pcl::compute3DCentroid(*source_world, src_centroid);
-    pcl::compute3DCentroid(*target_world, tgt_centroid);
-    Eigen::Matrix4f guess = Eigen::Matrix4f::Identity();
-    Eigen::Matrix3f Rz(Eigen::AngleAxisf((float)candidate.yaw_init,
-                                         Eigen::Vector3f::UnitZ()));
-    guess.block<3, 3>(0, 0) = Rz;
-    guess.block<3, 1>(0, 3) = tgt_centroid.head<3>() - Rz * src_centroid.head<3>();
-    gicp.align(aligned_source, guess);
+    // Initial guess: IDENTITY. Both clouds are already expressed in the world
+    // frame through their odometry poses, so under bounded drift the true
+    // correction is small and identity is inside the GICP basin (max
+    // correspondence 30 m). Do NOT seed with centroid alignment: on
+    // self-similar geometry (corridors, building faces) it yanks the query
+    // cloud onto the submap centroid and GICP converges to a SHIFTED local
+    // minimum with good fitness -- confidently wrong T_meas 5-30 m off
+    // (observed on lisbon 0714: backend pulled 2.6 m-consistent revisits 13 m
+    // apart). If identity fails the gates and the detector supplied a yaw hint
+    // (e.g. ScanContext), retry once rotated about the source centroid
+    // (rotation only, no translation).
+    gicp.align(aligned_source);
+    bool converged = gicp.hasConverged();
+    double fitness = converged ? gicp.getFitnessScore() : 1e9;
+    if ((!converged || fitness > config.icp_fitness_max) &&
+        std::abs(candidate.yaw_init) > 0.1)
+    {
+      Eigen::Vector4f src_centroid;
+      pcl::compute3DCentroid(*source_world, src_centroid);
+      Eigen::Matrix3f Rz(Eigen::AngleAxisf((float)candidate.yaw_init,
+                                           Eigen::Vector3f::UnitZ()));
+      Eigen::Matrix4f guess = Eigen::Matrix4f::Identity();
+      guess.block<3, 3>(0, 0) = Rz;
+      guess.block<3, 1>(0, 3) =
+          src_centroid.head<3>() - Rz * src_centroid.head<3>();
+      gicp.align(aligned_source, guess);
+    }
 
     if (!gicp.hasConverged())
     {
@@ -133,6 +145,20 @@ namespace cocolic
     Eigen::Matrix3d R = T_icp_double.block<3, 3>(0, 0);
     Eigen::Vector3d t = T_icp_double.block<3, 1>(0, 3);
     Sophus::SE3d T_icp(Eigen::Quaterniond(R).normalized(), t);
+
+    // Aliasing guard: how far did ICP move the query keyframe? A registration
+    // that displaces the query further than any plausible odometry drift is a
+    // shifted local minimum on self-similar geometry (good fitness, wrong pose)
+    // -- exactly the failure mode that poisons the back-end with confidently
+    // wrong constraints. Displacement is evaluated AT the query position, so a
+    // rotation about a far-away origin is measured by its actual effect.
+    const Eigen::Vector3d p_q = snapshots[q].T_LtoG_odom.translation();
+    const double correction = (R * p_q + t - p_q).norm();
+    if (correction > config.max_correction_m)
+    {
+      report.rejected_by = "max_correction";
+      return false;
+    }
 
     Sophus::SE3d T_q_corrected = T_icp * snapshots[q].T_LtoG_odom; // world frame
 
