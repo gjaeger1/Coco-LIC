@@ -86,6 +86,10 @@ namespace cocolic
     if (n_loops == 0)
       return 0;
 
+    // Pin the knot null space the sparse loop/backbone factors leave open, so
+    // the dense trajectory stays smooth under the deformation.
+    estimator.AddPositionKnotPriorsNURBS(config_.knot_prior_weight);
+
     ceres::Solver::Summary summary = estimator.Solve(config_.loop_max_iterations, false);
     std::cout << "🔁 LoopBackend: " << n_loops << " loop edges, spline deformed ("
               << summary.initial_cost << " -> " << summary.final_cost << ")\n";

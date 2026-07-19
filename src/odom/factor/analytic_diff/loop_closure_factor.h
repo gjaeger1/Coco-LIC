@@ -120,5 +120,38 @@ namespace cocolic
       Eigen::Matrix<double, 6, 1> sqrt_info_;
     };
 
+    // Weak prior anchoring a position control point to its (online) value.
+    // The loop back-end constrains the spline only at isolated sample times, so
+    // the 4 knots of each segment share a null space (many knot values give the
+    // same blended pose at the sample time). The optimizer wanders that null
+    // space and the dense trajectory blows up while the factor cost barely
+    // changes. A weak per-knot prior pins the null space (there is no other force
+    // there) without meaningfully resisting the loop correction (which lives in
+    // the observed subspace). Only the R3 (position) spline needs it: Coco-LIC's
+    // split spline takes position straight from the R3 knots.
+    struct PositionPriorFunctor
+    {
+      PositionPriorFunctor(const Eigen::Vector3d &p0, double sqrt_w)
+          : p0_(p0), sqrt_w_(sqrt_w) {}
+
+      template <class T>
+      bool operator()(const T *const p, T *residual) const
+      {
+        residual[0] = sqrt_w_ * (p[0] - T(p0_[0]));
+        residual[1] = sqrt_w_ * (p[1] - T(p0_[1]));
+        residual[2] = sqrt_w_ * (p[2] - T(p0_[2]));
+        return true;
+      }
+
+      static ceres::CostFunction *Create(const Eigen::Vector3d &p0, double sqrt_w)
+      {
+        return new ceres::AutoDiffCostFunction<PositionPriorFunctor, 3, 3>(
+            new PositionPriorFunctor(p0, sqrt_w));
+      }
+
+      Eigen::Vector3d p0_;
+      double sqrt_w_;
+    };
+
   }  // namespace analytic_derivative
 }  // namespace cocolic

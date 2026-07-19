@@ -469,6 +469,23 @@ namespace cocolic
     problem_->AddResidualBlock(cost, loss, vec);
   }
 
+  void TrajectoryEstimator::AddPositionKnotPriorsNURBS(double sqrt_w)
+  {
+    const size_t n = trajectory_->numKnots();
+    for (size_t i = 0; i < n; ++i)
+    {
+      double *p = trajectory_->getKnotPos(i).data();
+      const Eigen::Vector3d p0 = trajectory_->getKnotPos(i);
+      problem_->AddParameterBlock(p, 3);
+      // Do not prior-anchor a locked (gauge) knot; it is constant anyway.
+      if (fixed_control_point_index_ >= 0 && i <= size_t(fixed_control_point_index_))
+        continue;
+      ceres::CostFunction *cost =
+          analytic_derivative::PositionPriorFunctor::Create(p0, sqrt_w);
+      problem_->AddResidualBlock(cost, nullptr, p);
+    }
+  }
+
   void TrajectoryEstimator::AddCallback(
       const std::vector<std::string> &descriptions,
       const std::vector<size_t> &block_size, std::vector<double *> &param_block)

@@ -292,6 +292,12 @@ namespace cocolic
                                    const Eigen::Matrix<double, 6, 1> &sqrt_info,
                                    ceres::LossFunction *loss);
 
+    // Weak per-knot position prior toward the current (online) knot values.
+    // Kills the knot null space the sparse loop/backbone factors leave open
+    // (see PositionPriorFunctor). Call after the loop/backbone factors, before
+    // Solve. sqrt_w small (~0.1): pins the null space without fighting loops.
+    void AddPositionKnotPriorsNURBS(double sqrt_w);
+
     void Add6DofLocalVelocityAutoDiff(
         const double timestamp, const Eigen::Matrix<double, 6, 1> &local_gyro_vel,
         double gyro_weight, double velocity_weight);

@@ -44,6 +44,7 @@ namespace cocolic
     double backbone_dt_s = 0.4;        // relative-pose backbone edge spacing [s]
     double loop_robust_cauchy = 1.0;   // Cauchy loss scale for loop edges
     int loop_max_iterations = 30;      // LM iterations for the global solve
+    double knot_prior_weight = 0.1;    // weak per-knot position prior (kills knot null space)
 
     std::string log_dir;              // empty -> "<cache_path>/loop_log"
     int inject_false_loops = 0;       // research tool, see eval tooling
@@ -95,6 +96,7 @@ namespace cocolic
         c.backbone_dt_s = p["backbone_dt_s"] ? p["backbone_dt_s"].as<double>() : c.backbone_dt_s;
         c.loop_robust_cauchy = p["loop_robust_cauchy"] ? p["loop_robust_cauchy"].as<double>() : c.loop_robust_cauchy;
         c.loop_max_iterations = p["loop_max_iterations"] ? p["loop_max_iterations"].as<int>() : c.loop_max_iterations;
+        c.knot_prior_weight = p["knot_prior_weight"] ? p["knot_prior_weight"].as<double>() : c.knot_prior_weight;
       }
       c.log_dir = s("log_dir", c.log_dir);
       c.inject_false_loops = i("inject_false_loops", c.inject_false_loops);
