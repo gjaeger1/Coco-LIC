@@ -686,7 +686,11 @@ namespace cocolic
     image_buf_.back().image = cvImgPtr->image;
     nerf_time_.push_back(image_buf_.back().timestamp);
 
-    if (image_buf_.back().image.cols == 640 || image_buf_.back().image.cols == 1280)
+    // 640x512 target is for the 1280x1024-family sensors (and their 640-wide
+    // halves). Guard by height so 16:9 streams (e.g. ZED 1280x720, which has
+    // its own native calibration) pass through untouched.
+    if (image_buf_.back().image.cols == 640 ||
+        (image_buf_.back().image.cols == 1280 && image_buf_.back().image.rows == 1024))
     {
       cv::resize(image_buf_.back().image, image_buf_.back().image, cv::Size(640, 512), 0, 0, cv::INTER_LINEAR);
     }
@@ -725,7 +729,11 @@ namespace cocolic
 
     // std::cout << image_buf_.back().image.rows << " " << image_buf_.back().image.cols << std::endl;
 
-    if (image_buf_.back().image.cols == 640 || image_buf_.back().image.cols == 1280)
+    // 640x512 target is for the 1280x1024-family sensors (and their 640-wide
+    // halves). Guard by height so 16:9 streams (e.g. ZED 1280x720, which has
+    // its own native calibration) pass through untouched.
+    if (image_buf_.back().image.cols == 640 ||
+        (image_buf_.back().image.cols == 1280 && image_buf_.back().image.rows == 1024))
     {
       cv::resize(image_buf_.back().image, image_buf_.back().image, cv::Size(640, 512), 0, 0, cv::INTER_LINEAR);
     }
