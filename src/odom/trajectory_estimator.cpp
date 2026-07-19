@@ -471,23 +471,36 @@ namespace cocolic
 
   void TrajectoryEstimator::AddPositionKnotPriorsNURBS(double sqrt_w)
   {
-    // Relative (adjacent-difference) priors: see PositionDiffPriorFunctor. One
-    // residual per consecutive knot pair chains every position knot to its
-    // neighbour, killing intra-segment null-space wiggle while staying invariant
-    // to the smooth global loop deformation.
+    // Rigid-motion-invariant adjacent-knot shape priors (see
+    // LocalPositionDiffPriorFunctor / So3DiffPriorFunctor): one local-frame
+    // position-difference prior and one relative-rotation prior per consecutive
+    // knot pair. Chains every knot to its neighbour, killing intra-segment
+    // null-space wiggle while leaving the smooth global loop deformation free.
     const size_t n = trajectory_->numKnots();
     if (n < 2) return;
     for (size_t i = 0; i + 1 < n; ++i)
     {
+      double *qa = trajectory_->getKnotSO3(i).data();
+      double *qb = trajectory_->getKnotSO3(i + 1).data();
       double *pa = trajectory_->getKnotPos(i).data();
       double *pb = trajectory_->getKnotPos(i + 1).data();
-      const Eigen::Vector3d diff0 =
-          trajectory_->getKnotPos(i + 1) - trajectory_->getKnotPos(i);
+      problem_->AddParameterBlock(qa, 4, analytic_local_parameterization_);
+      problem_->AddParameterBlock(qb, 4, analytic_local_parameterization_);
       problem_->AddParameterBlock(pa, 3);
       problem_->AddParameterBlock(pb, 3);
-      ceres::CostFunction *cost =
-          analytic_derivative::PositionDiffPriorFunctor::Create(diff0, sqrt_w);
-      problem_->AddResidualBlock(cost, nullptr, pa, pb);
+
+      const Eigen::Vector3d d_local0 =
+          trajectory_->getKnotSO3(i).inverse() *
+          (trajectory_->getKnotPos(i + 1) - trajectory_->getKnotPos(i));
+      problem_->AddResidualBlock(
+          analytic_derivative::LocalPositionDiffPriorFunctor::Create(d_local0, sqrt_w),
+          nullptr, qa, pa, pb);
+
+      const Sophus::SO3d D0 =
+          trajectory_->getKnotSO3(i).inverse() * trajectory_->getKnotSO3(i + 1);
+      problem_->AddResidualBlock(
+          analytic_derivative::So3DiffPriorFunctor::Create(D0, sqrt_w),
+          nullptr, qa, qb);
     }
   }
 

@@ -66,8 +66,8 @@ loop_closure:
     # close. 200 keeps their gradient alive; the verifier remains the primary
     # false-loop defense on this dataset.
     loop_robust_cauchy: 200.0
-    loop_max_iterations: 30
-    knot_prior_weight: 1.0   # adjacent-knot difference prior (null-space damping)
+    loop_max_iterations: 100  # 48 m correction propagating through chained shape priors
+    knot_prior_weight: 1.0   # adjacent-knot local-frame shape prior (null-space damping)
   log_dir: ""
   inject_false_loops: 0
 lidar_skip: 10  # downsample: randomly select a LiDAR point every [lidar_skip] points

@@ -120,43 +120,82 @@ namespace cocolic
       Eigen::Matrix<double, 6, 1> sqrt_info_;
     };
 
-    // Prior anchoring the DIFFERENCE of two adjacent position control points to
-    // its (online) value: residual = sqrt_w * ((p_b - p_a) - (p_b0 - p_a0)).
+    // Adjacent-knot shape priors, RIGID-MOTION INVARIANT.
     //
     // The loop back-end constrains the spline only at isolated sample times, so
     // the knots of each segment share a null space (many knot values give the
-    // same blended pose at the sample time). The optimizer wanders that null
-    // space and the dense trajectory blows up while the factor cost barely
-    // changes. An ABSOLUTE per-knot prior kills the wiggle but also anchors the
-    // knots to their DRIFTED online positions, fighting the very loop correction
-    // we want (observed: loops left unclosed). The relative (adjacent-difference)
-    // prior is invariant to the smooth, slowly-varying loop deformation --
-    // distributing a 48 m correction over thousands of knots changes each
-    // adjacent difference by millimetres -- yet strongly forbids high-frequency
-    // null-space wiggle between neighbours. Only the R3 (position) spline needs
-    // it: Coco-LIC's split spline takes position straight from the R3 knots, and
-    // the SO(3) knots are held by the backbone rotations.
-    struct PositionDiffPriorFunctor
+    // same blended pose at the sample time); the optimizer wanders it and the
+    // dense trajectory blows up. Two earlier prior designs failed:
+    //   * absolute per-knot priors anchor knots to their DRIFTED positions and
+    //     fight the loop correction (loops left unclosed);
+    //   * WORLD-frame difference priors (p_b - p_a) are translation-invariant
+    //     but NOT rotation-invariant -- with largely-rotational drift (35 deg on
+    //     lisbon 0714) the closure must rotate the trajectory tail, which
+    //     changes every world-frame difference and the priors fight it again.
+    // The fix: anchor the LOCAL-frame difference R_a^-1 (p_b - p_a) and the
+    // relative rotation R_a^-1 R_b. Both are invariant under any rigid transform
+    // of the trajectory (p -> R0 p + t0, R -> R0 R), so the smooth loop
+    // correction is free, while intra-segment wiggle (which changes local shape)
+    // is punished.
+    struct LocalPositionDiffPriorFunctor
     {
-      PositionDiffPriorFunctor(const Eigen::Vector3d &diff0, double sqrt_w)
-          : diff0_(diff0), sqrt_w_(sqrt_w) {}
+      LocalPositionDiffPriorFunctor(const Eigen::Vector3d &d_local0, double sqrt_w)
+          : d_local0_(d_local0), sqrt_w_(sqrt_w) {}
 
+      // qa: SO3 knot a (quaternion, 4); pa/pb: position knots a/b (3 each).
       template <class T>
-      bool operator()(const T *const pa, const T *const pb, T *residual) const
+      bool operator()(const T *const qa, const T *const pa, const T *const pb,
+                      T *residual) const
       {
-        residual[0] = sqrt_w_ * ((pb[0] - pa[0]) - T(diff0_[0]));
-        residual[1] = sqrt_w_ * ((pb[1] - pa[1]) - T(diff0_[1]));
-        residual[2] = sqrt_w_ * ((pb[2] - pa[2]) - T(diff0_[2]));
+        Eigen::Map<Sophus::SO3<T> const> R_a(qa);
+        Eigen::Matrix<T, 3, 1> d;
+        d << pb[0] - pa[0], pb[1] - pa[1], pb[2] - pa[2];
+        Eigen::Matrix<T, 3, 1> r = R_a.inverse() * d - d_local0_.cast<T>();
+        residual[0] = sqrt_w_ * r[0];
+        residual[1] = sqrt_w_ * r[1];
+        residual[2] = sqrt_w_ * r[2];
         return true;
       }
 
-      static ceres::CostFunction *Create(const Eigen::Vector3d &diff0, double sqrt_w)
+      static ceres::CostFunction *Create(const Eigen::Vector3d &d_local0,
+                                         double sqrt_w)
       {
-        return new ceres::AutoDiffCostFunction<PositionDiffPriorFunctor, 3, 3, 3>(
-            new PositionDiffPriorFunctor(diff0, sqrt_w));
+        return new ceres::AutoDiffCostFunction<LocalPositionDiffPriorFunctor, 3,
+                                               4, 3, 3>(
+            new LocalPositionDiffPriorFunctor(d_local0, sqrt_w));
       }
 
-      Eigen::Vector3d diff0_;
+      Eigen::Vector3d d_local0_;
+      double sqrt_w_;
+    };
+
+    // Relative-rotation prior between adjacent SO3 knots (see above):
+    // residual = sqrt_w * Log(D0^-1 * R_a^-1 R_b), D0 the online relative rotation.
+    struct So3DiffPriorFunctor
+    {
+      So3DiffPriorFunctor(const Sophus::SO3d &D0, double sqrt_w)
+          : D0_inv_(D0.inverse()), sqrt_w_(sqrt_w) {}
+
+      template <class T>
+      bool operator()(const T *const qa, const T *const qb, T *residual) const
+      {
+        Eigen::Map<Sophus::SO3<T> const> R_a(qa);
+        Eigen::Map<Sophus::SO3<T> const> R_b(qb);
+        Eigen::Matrix<T, 3, 1> r =
+            (D0_inv_.cast<T>() * (R_a.inverse() * R_b)).log();
+        residual[0] = sqrt_w_ * r[0];
+        residual[1] = sqrt_w_ * r[1];
+        residual[2] = sqrt_w_ * r[2];
+        return true;
+      }
+
+      static ceres::CostFunction *Create(const Sophus::SO3d &D0, double sqrt_w)
+      {
+        return new ceres::AutoDiffCostFunction<So3DiffPriorFunctor, 3, 4, 4>(
+            new So3DiffPriorFunctor(D0, sqrt_w));
+      }
+
+      Sophus::SO3d D0_inv_;
       double sqrt_w_;
     };
 
