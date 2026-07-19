@@ -61,8 +61,13 @@ loop_closure:
     odom_translation_sigma_m: 0.05
     rp_information_scale: 100.0
     backbone_dt_s: 0.4
-    loop_robust_cauchy: 1.0
+    # ~48 m of real drift -> whitened loop residuals ~150. Cauchy scale 1.0 would
+    # treat the TRUE (GICP-verified, >0.9 overlap) loops as outliers and refuse to
+    # close. 200 keeps their gradient alive; the verifier remains the primary
+    # false-loop defense on this dataset.
+    loop_robust_cauchy: 200.0
     loop_max_iterations: 30
+    knot_prior_weight: 1.0   # adjacent-knot difference prior (null-space damping)
   log_dir: ""
   inject_false_loops: 0
 lidar_skip: 10  # downsample: randomly select a LiDAR point every [lidar_skip] points

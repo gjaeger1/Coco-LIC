@@ -471,18 +471,23 @@ namespace cocolic
 
   void TrajectoryEstimator::AddPositionKnotPriorsNURBS(double sqrt_w)
   {
+    // Relative (adjacent-difference) priors: see PositionDiffPriorFunctor. One
+    // residual per consecutive knot pair chains every position knot to its
+    // neighbour, killing intra-segment null-space wiggle while staying invariant
+    // to the smooth global loop deformation.
     const size_t n = trajectory_->numKnots();
-    for (size_t i = 0; i < n; ++i)
+    if (n < 2) return;
+    for (size_t i = 0; i + 1 < n; ++i)
     {
-      double *p = trajectory_->getKnotPos(i).data();
-      const Eigen::Vector3d p0 = trajectory_->getKnotPos(i);
-      problem_->AddParameterBlock(p, 3);
-      // Do not prior-anchor a locked (gauge) knot; it is constant anyway.
-      if (fixed_control_point_index_ >= 0 && i <= size_t(fixed_control_point_index_))
-        continue;
+      double *pa = trajectory_->getKnotPos(i).data();
+      double *pb = trajectory_->getKnotPos(i + 1).data();
+      const Eigen::Vector3d diff0 =
+          trajectory_->getKnotPos(i + 1) - trajectory_->getKnotPos(i);
+      problem_->AddParameterBlock(pa, 3);
+      problem_->AddParameterBlock(pb, 3);
       ceres::CostFunction *cost =
-          analytic_derivative::PositionPriorFunctor::Create(p0, sqrt_w);
-      problem_->AddResidualBlock(cost, nullptr, p);
+          analytic_derivative::PositionDiffPriorFunctor::Create(diff0, sqrt_w);
+      problem_->AddResidualBlock(cost, nullptr, pa, pb);
     }
   }
 
