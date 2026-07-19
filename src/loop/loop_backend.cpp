@@ -35,20 +35,32 @@ namespace cocolic
     StaticInformationProvider info(config_);
 
     // ---- dense relative-pose backbone (preserves online local shape) ----
-    // Edges spaced backbone_dt_s apart so knot windows stay disjoint yet cover
-    // and link every control point; measurement = current (online) IMU relative
-    // pose, so the backbone is initially zero-residual.
-    const int64_t t_start = trajectory_->knts[SplineOrder - 1];  // first valid eval time
+    // One relative-pose edge between every knot group K and K+SplineOrder, i.e.
+    // stepping by SplineOrder knots. This is KNOT-INDEX based, not time based:
+    // Coco-LIC uses non-uniform knots (as dense as ~0.025 s), so a fixed-time
+    // backbone leaves the interior knots of each edge unconstrained in dense
+    // regions -> the loop pull makes them oscillate (trajectory blows up). At a
+    // stride of SplineOrder, consecutive edges are adjacent (edge K covers knots
+    // K..K+3 and K+4..K+7; edge K+4 covers K+4..K+7 and K+8..K+11), so EVERY
+    // control point is constrained. Measurement = current (online) relative
+    // pose, so the backbone is initially zero-residual (shape-preserving).
+    const std::vector<int64_t> &knts = trajectory_->knts;
+    const int num_seg = static_cast<int>(trajectory_->blending_mats.size());
     const int64_t t_end = trajectory_->maxTimeNsNURBS();
-    const int64_t dt = static_cast<int64_t>(config_.backbone_dt_s * S_TO_NS);
-    if (dt <= 0)
-      return 0;
-    for (int64_t t = t_start; t + dt < t_end; t += dt)
+    // idx_i = K needs GetIdxT(t_i).first = K+SplineOrder-1, i.e. t_i at the start
+    // of segment (K+SplineOrder-1); idx_j = K+SplineOrder similarly.
+    for (int K = 0; K + 2 * SplineOrder <= num_seg; K += SplineOrder)
     {
-      SE3d Ti = trajectory_->GetIMUPoseNsNURBS(t);
-      SE3d Tj = trajectory_->GetIMUPoseNsNURBS(t + dt);
-      estimator.AddLoopClosureFactorNURBS(t, t + dt, Ti.inverse() * Tj,
-                                          info.BackboneSqrtInfo(t, t + dt), nullptr);
+      const int seg_i = K + (SplineOrder - 1);
+      const int seg_j = K + SplineOrder + (SplineOrder - 1);
+      if (seg_j + 1 >= static_cast<int>(knts.size())) break;
+      const int64_t t_i = knts[seg_i];
+      const int64_t t_j = knts[seg_j];
+      if (t_j >= t_end) break;
+      SE3d Ti = trajectory_->GetIMUPoseNsNURBS(t_i);
+      SE3d Tj = trajectory_->GetIMUPoseNsNURBS(t_j);
+      estimator.AddLoopClosureFactorNURBS(t_i, t_j, Ti.inverse() * Tj,
+                                          info.BackboneSqrtInfo(t_i, t_j), nullptr);
     }
 
     // ---- loop edges (robust) ----

@@ -38,6 +38,7 @@ namespace cocolic
     int match_index = -1;
     double descriptor_score = -1.0;  // detector-specific; -1 if the detector exposes none
     double yaw_init = 0.0;           // coarse relative yaw [rad] from the detector, 0 if unknown
+    std::string source;              // which detector proposed it (visual_bow | spatial | ...)
   };
 
   // Every field is written to the JSONL log, accepted or not.

@@ -97,17 +97,22 @@ namespace cocolic
     std::map<std::pair<int, int>, LoopCandidate> unique_cands;
     for (const auto &det : detectors_)
     {
-      for (const LoopCandidate &c : det->AddAndQuery(kf))
+      for (LoopCandidate c : det->AddAndQuery(kf))
       {
+        c.source = det->Name();
         auto key = std::make_pair(c.query_index, c.match_index);
         auto it = unique_cands.find(key);
         if (it == unique_cands.end())
         {
           unique_cands.emplace(key, c);
         }
-        else if (it->second.yaw_init == 0.0 && c.yaw_init != 0.0)
+        else
         {
-          it->second.yaw_init = c.yaw_init;
+          if (it->second.yaw_init == 0.0 && c.yaw_init != 0.0)
+            it->second.yaw_init = c.yaw_init;
+          // record that more than one detector agreed on this pair
+          if (it->second.source.find(c.source) == std::string::npos)
+            it->second.source += "+" + c.source;
         }
       }
     }
@@ -141,7 +146,7 @@ namespace cocolic
          << ", \"match\": " << c.match_index
          << ", \"t_query_ns\": " << (snapshots_[c.query_index].time_ns + t0)
          << ", \"t_match_ns\": " << (snapshots_[c.match_index].time_ns + t0)
-         << ", \"detector\": \"" << config_.detector << "\""
+         << ", \"detector\": \"" << (c.source.empty() ? config_.detector : c.source) << "\""
          << ", \"descriptor_score\": " << c.descriptor_score
          << ", \"yaw_init\": " << c.yaw_init
          << ", \"icp_fitness\": " << r.icp_fitness
@@ -199,6 +204,7 @@ namespace cocolic
           cand.match_index = m;
           cand.descriptor_score = -1.0;
           cand.yaw_init = 0.0;
+          cand.source = "injected";
 
           VerificationReport rep;
           rep.accepted = true;
