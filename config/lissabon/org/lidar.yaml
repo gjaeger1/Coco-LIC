@@ -1,0 +1,60 @@
+lidar0:
+    topic: /livox/lidar
+    is_livox: true
+    Extrinsics:  # lidar to imu # probably means imu to lidar if compared to the example config for the livox avia
+    # imu 8 mm behind and 23 mm below the lidar source, which is at the center of the glass pane
+        Trans: [0.008, 0, 0.023]
+        Rot: [1.000, 0.000, 0.000,
+              0.000, 1.000, 0.000,
+              0.000, 0.000, 1.000]
+
+num_lidars: 1
+
+# Usually false if header stamp/timebase is scan start.
+# Your converted CustomMsg timebase is first point time, so keep false.
+lidar_timestamp_end: false
+
+### FeatureExtraction ###
+Livox:
+    n_scan: 6
+    blind: 0.5
+    group_size: 8
+    point_filter_num: 1
+    inf_bound: 4
+    disA: 0.01
+    disB: 0.1
+    limit_maxmid: 6.25
+    limit_midmin: 6.25
+    limit_maxmin: 3.24
+    p2l_ratio: 225
+    jump_up_limit: 170.0
+    jump_down_limit: 8.0
+    edgea: 2
+    edgeb: 0.1
+    smallp_intersect: 172.5
+    smallp_ratio: 1.2
+    edge_threshold: 1.0
+    surf_threshold: 0.1
+    odometry_surface_leaf_size: 0.1
+    min_distance: 0.5
+    max_distance: 100.0
+
+### Odometry ###
+use_corner_feature: false
+current_scan_param:
+    corner_leaf_size: 0.3
+    surface_leaf_size: 0.3
+    edge_min_valid_num: 1
+    surf_min_valid_num: 10
+    correspondence_downsample: 2
+
+keyframe_strategy:
+    angle_degree: 10
+    dist_meter: 1.0
+    time_second: 10
+
+map_param:
+    keyframe_search_radius: 35.0
+    keyframe_search_time: 100.0
+    keyframe_density: 0.5
+    cloud_reserved_time: -1

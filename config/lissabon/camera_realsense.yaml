@@ -1,31 +1,32 @@
 %YAML:1.0
 
-# RealSense on the Lisbon Livox-HAP handheld rig (0714 gimbal bag). Topic +
-# native resolution confirmed from the bag: /realsense/image, rgb8 1920x1080.
-# msg_manager downscales 1920 -> 960x540, so the intrinsics below are for 960x540.
-# These are ESTIMATED from nominal RealSense-D4xx 1080p values (fx=fy~1385,
-# cx~960, cy~540) halved to 960x540; replace with the real factory calibration
-# for an accurate LICO run. The VPR-validation config keeps image_weight ~ 0, so
-# these only need to be plausible enough not to destabilise; the images still
-# flow to the VisualBoWDetector for place recognition.
-image_topic: /realsense/image  # raw sensor_msgs/Image; code also tries <topic>/compressed
+# RealSense on the Lisbon Livox-HAP handheld rig (0714 bag, /realsense/image).
+# Intrinsics + extrinsics are the REAL calibration from
+# config/lissabon/org/camera_1920x1080_realsense.yaml, scaled from 1920x1080 to
+# 960x540. msg_manager downscales 1920 -> 960x540 (an exact /2), so fx/fy/cx/cy
+# are the org values halved -- mathematically the same camera model, 4x fewer
+# pixels (faster offline replay). The rig is rigidly mounted (the gimbal holds
+# the whole assembly, not just the camera), so this static extrinsic is valid.
+image_topic: /realsense/image
 
 image_width: 960
 image_height: 540
-cam_fx: 692.0
-cam_fy: 692.0
-cam_cx: 480.0
-cam_cy: 270.0
+cam_fx: 682.6539916992188   # 1365.3079833984375 / 2
+cam_fy: 682.2207641601562   # 1364.4415283203125 / 2
+cam_cx: 483.9346618652344   # 967.8693237304688 / 2
+cam_cy: 280.5687255859375   # 561.137451171875 / 2
+
+# Rectified image, so distortion is zero.
 cam_d0: 0.0
 cam_d1: 0.0
 cam_d2: 0.0
 cam_d3: 0.0
 cam_d4: 0.0
 
-CameraExtrinsics:  # camera to imu (PLACEHOLDER)
-    Trans: [0.0, 0.0, 0.0]
-    Rot: [ 0.0,  0.0, 1.0,
-          -1.0,  0.0, 0.0,
-           0.0, -1.0, 0.0]
+CameraExtrinsics:  # camera to imu (real calibration; resolution-independent)
+    Trans: [-0.03257, -0.06, 0.0025]
+    Rot: [ 0.0, 0.0, 1.0,
+          -1.0, 0.0, 0.0,
+          0.0, -1.0, 0.0]
 
 img_time_offset: 0.0  # camera to imu [s]

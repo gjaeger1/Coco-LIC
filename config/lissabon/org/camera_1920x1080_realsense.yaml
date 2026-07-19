@@ -1,0 +1,27 @@
+%YAML:1.0
+
+image_topic: /realsense/image
+
+image_width: 1920
+image_height: 1080
+
+cam_fx: 1365.3079833984375
+cam_fy: 1364.4415283203125
+cam_cx: 967.8693237304688
+cam_cy: 561.137451171875
+
+# Rectified image, so distortion should be zero.
+cam_d0: 0.0
+cam_d1: 0.0
+cam_d2: 0.0
+cam_d3: 0.0
+cam_d4: 0.0
+
+CameraExtrinsics:  # camera to imu # probably means imu to camera
+    Trans: [-0.03257, -0.06, 0.0025] # -0.04 0.025 0.06
+    Rot: [ 0.0, 0.0, 1.0,
+          -1.0, 0.0, 0.0,
+          0.0, -1.0, 0.0]
+
+# Start with zero unless you have measured camera/IMU timestamp offset.
+img_time_offset: 0.0

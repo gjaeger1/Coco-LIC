@@ -19,8 +19,14 @@ SOPHUS_FUNC bool isOrthogonal(Eigen::MatrixBase<D> const& R) {
   static_assert(N == M, "must be a square matrix");
   static_assert(N >= 2, "must have compile time dimension >= 2");
 
+  // Tolerance relaxed from Constants::epsilon() (machine eps ~2e-16). Rotations
+  // produced by the continuous-time optimizer / B-spline evaluation routinely
+  // drift ~1e-8 off orthonormal from floating-point roundoff; machine-epsilon is
+  // absurdly strict and aborts the SO3(Matrix) constructor on otherwise-valid
+  // rotations (the constructor quaternion-normalizes R anyway, so accepting a
+  // slightly-off R is safe). 1e-5 still catches genuinely malformed matrices.
   return (R * R.transpose() - Matrix<Scalar, N, N>::Identity()).norm() <
-         Constants<Scalar>::epsilon();
+         Scalar(1e-5);
 }
 
 // Takes in arbiray square matrix and returns true if it is
