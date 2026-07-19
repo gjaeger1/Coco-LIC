@@ -17,7 +17,13 @@ division_coarse: 1  # if it is uniform, decide how many control points to place 
 
 
 ### OptimizationParams ###
-t_begin_add_cam: 5.0  # [s] visual constraints will be added after the system has been successfully initialized for a while
+# 99999 = never add visual factors: without the real ZED2i/RealSense calibration
+# the visual PnP factors go NaN and abort (non-finite IMU bias -> Sophus SO3).
+# Images are still decoded and handed to the VisualBoWDetector (OnKeyframe runs
+# before/independent of the visual-factor block), so this validates the camera
+# VPR path on a STABLE LiDAR-inertial trajectory. Set back to ~5.0 once real
+# calibration is in camera_*.yaml to use the camera in odometry too.
+t_begin_add_cam: 99999.0  # [s] disable visual odometry factors (VPR-only camera use)
 lidar_iter: 2
 use_lidar_scale: true  # scale the lidar weight
 lidar_weight: 500.0
